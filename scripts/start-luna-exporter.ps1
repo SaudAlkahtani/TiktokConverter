@@ -7,7 +7,6 @@ $logDirectory = Join-Path $projectRoot 'logs'
 $logFile = Join-Path $logDirectory 'luna-exporter.log'
 $errorLogFile = Join-Path $logDirectory 'luna-exporter-error.log'
 $port = 4173
-$localBotLauncher = Join-Path $PSScriptRoot 'start-local-bot-api.cmd'
 
 function Test-ExporterRunning {
     try {
@@ -16,23 +15,20 @@ function Test-ExporterRunning {
     } catch { return $false }
 }
 
-function Test-LocalBotApiRunning {
-    $client = [System.Net.Sockets.TcpClient]::new()
-    try { $client.Connect('127.0.0.1', 8081); return $true } catch { return $false } finally { $client.Dispose() }
-}
-
 if (-not (Test-Path (Join-Path $projectRoot 'node_modules'))) {
     Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show('The exporter dependencies are missing. Open the project folder and run npm install once.', 'Luna TikTok Exporter') | Out-Null
+    [System.Windows.MessageBox]::Show('The converter dependencies are missing. Open the project folder and run npm install once.', 'Local Video Converter') | Out-Null
     exit 1
 }
 
 New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
-if ((Test-Path (Join-Path $projectRoot 'local-bot-api\secrets.env')) -and -not (Test-LocalBotApiRunning)) {
-    try { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', "`"$localBotLauncher`"" -WindowStyle Hidden } catch { }
-}
 if (-not (Test-ExporterRunning)) {
-    $nodeCommand = (Get-Command node.exe -ErrorAction Stop).Source
+    $bundledNode = Join-Path $projectRoot 'tools\node\node.exe'
+    if (Test-Path $bundledNode) {
+        $nodeCommand = $bundledNode
+    } else {
+        $nodeCommand = (Get-Command node.exe -ErrorAction Stop).Source
+    }
     Start-Process -FilePath $nodeCommand -ArgumentList 'src/server.js' -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput $logFile -RedirectStandardError $errorLogFile
     $deadline = (Get-Date).AddSeconds(20)
     while ((Get-Date) -lt $deadline) {
@@ -45,5 +41,5 @@ if (Test-ExporterRunning) {
     try { Start-Process 'http://127.0.0.1:4173' } catch { Write-Host 'Exporter is running at http://127.0.0.1:4173' }
 } else {
     Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show("The exporter could not start. Check the log at:`n$logFile", 'Luna TikTok Exporter') | Out-Null
+    [System.Windows.MessageBox]::Show("The converter could not start. Check the log at:`n$logFile", 'Local Video Converter') | Out-Null
 }

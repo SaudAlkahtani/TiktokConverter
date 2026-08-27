@@ -3,28 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Luna TikTok Exporter</title>
+    <title>Local Video Converter</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
     <main>
       <section class="hero">
         <p class="eyebrow">LOCAL VIDEO WORKER</p>
-        <h1>Luna <span>→</span> TikTok</h1>
-        <p class="lede">Send a 4K original to your Telegram bot. This computer makes a clean 1080p60 TikTok export and returns it to the same chat.</p>
+        <h1>Local <span>→</span> Export</h1>
+        <p class="lede">Choose a video from this computer. The local worker makes a clean 1080p60 MP4, then gives you a direct download when it is finished.</p>
         <div class="profile" id="profile">Checking worker…</div>
       </section>
       <section class="guide">
-        <div><b>01</b><span>Send as <strong>File</strong> in Telegram</span></div>
-        <div><b>02</b><span>Keep this dashboard open</span></div>
-        <div><b>03</b><span>Receive the finished MP4</span></div>
+        <div><b>01</b><span>Choose a <strong>local video</strong></span></div>
+        <div><b>02</b><span>Upload it to this worker</span></div>
+        <div><b>03</b><span>Download the finished MP4</span></div>
+      </section>
+      <section class="upload-card">
+        <p class="eyebrow">LOCAL FILE UPLOAD</p>
+        <form id="upload-form">
+          <label class="file-picker"><input id="video-file" name="video" type="file" accept="video/*,.mov,.mkv,.avi,.webm,.m4v" required /><span id="file-label">Choose a video</span></label>
+          <button type="submit">Upload &amp; convert</button>
+        </form>
+        <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server.</p>
       </section>
       <section class="jobs-section">
         <div class="section-heading"><div><p class="eyebrow">PROCESSING QUEUE</p><h2>Exports</h2></div><span class="live"><i></i> LIVE</span></div>
-        <div id="empty" class="empty">No clips yet. Send an original video to your Telegram bot to begin.</div>
+        <div id="empty" class="empty">No clips yet. Choose a video above to begin.</div>
         <div id="jobs" class="jobs"></div>
       </section>
-      <aside class="note"><strong>For 4K files:</strong> Telegram’s normal bot API only downloads up to 20 MB. This worker supports Telegram’s Local Bot API Server for large originals and up to 2 GB returned files.</aside>
+      <aside class="note"><strong>Local-only:</strong> uploads, source files, and exports stay in this project’s local media folders. Nothing is sent to a Telegram bot.</aside>
     </main>
     <template id="job-template">
       <article class="job">

@@ -1,23 +1,56 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import fssync from "node:fs";
+import { pipeline } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
-import { config, isLocalBotApi } from "./config.js";
+import multipart from "@fastify/multipart";
+import { config } from "./config.js";
 import { JobQueue } from "./queue.js";
-import { startTelegram } from "./telegram.js";
+import { probe } from "./ffmpeg.js";
 
 const app = Fastify({ logger: true });
 const queue = new JobQueue();
 await queue.prepare();
 await app.register(fastifyStatic, { root: path.join(config.root, "public"), prefix: "/" });
+await app.register(multipart, { limits: { files: 1, fileSize: config.uploadLimitBytes } });
 
-app.get("/api/health", async () => ({ ok: true, botConfigured: Boolean(config.token), localBotApi: isLocalBotApi, profile: { name: "TikTok 1080p60", bitrate: config.export.bitrate, maxrate: config.export.maxrate, audioBitrate: "256k" } }));
+const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
+
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: "TikTok 1080p60", bitrate: config.export.bitrate, maxrate: config.export.maxrate, audioBitrate: "256k" } }));
 app.get("/api/jobs", async () => queue.snapshot());
+app.post("/api/uploads", async (request, reply) => {
+  let target;
+  try {
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ error: "Choose a video file first." });
+
+    const sourceName = safeName(file.filename);
+    const storedName = `${Date.now()}-${randomUUID()}-${sourceName}`;
+    target = path.join(config.directories.incoming, storedName);
+    await pipeline(file.file, fssync.createWriteStream(target, { flags: "wx" }));
+    if (file.file.truncated) throw new Error("The upload is larger than this server's configured limit.");
+
+    const stat = await fs.stat(target);
+    const source = await probe(target);
+    const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size });
+    return reply.code(202).send({ job: { id: job.id, sourceName, bytes: stat.size }, source });
+  } catch (error) {
+    if (target) await fs.rm(target, { force: true });
+    request.log.warn({ err: error }, "Upload was rejected");
+    const tooLarge = error.code === "FST_REQ_FILE_TOO_LARGE" || error.message.includes("configured limit");
+    const unreadable = error.message.includes("No readable video stream") || error.message.startsWith("ffprobe failed");
+    return reply.code(tooLarge ? 413 : 400).send({ error: tooLarge ? "This file exceeds the upload limit." : unreadable ? "FFmpeg could not read this file as a video." : "The upload could not be processed. Please try another video file." });
+  }
+});
 app.get("/api/jobs/:id/download", async (request, reply) => {
   const job = queue.get(request.params.id);
   if (!job?.outputPath) return reply.code(404).send({ error: "Export not available" });
   try { await fs.access(job.outputPath); } catch { return reply.code(404).send({ error: "Output was removed" }); }
-  return reply.download(job.outputPath, path.basename(job.outputPath));
+  const filename = path.basename(job.outputPath).replace(/"/g, "");
+  reply.header("Content-Disposition", `attachment; filename="${filename}"`);
+  return reply.type("video/mp4").send(fssync.createReadStream(job.outputPath));
 });
 app.get("/api/events", (request, reply) => {
   reply.hijack(); reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
@@ -27,8 +60,3 @@ app.get("/api/events", (request, reply) => {
 
 await app.listen({ port: config.port, host: "127.0.0.1" });
 console.log(`Dashboard: http://127.0.0.1:${config.port}`);
-if (!config.token) console.log(`Telegram bot disabled: put the token for ${config.botUsername} in .env and restart.`);
-else {
-  try { await startTelegram(queue); console.log(`Telegram bot active: ${config.botUsername}`); }
-  catch (error) { console.error(`Telegram bot was not started: ${error.message}`); process.exitCode = 1; }
-}

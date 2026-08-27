@@ -9,8 +9,8 @@ export class JobQueue extends EventEmitter {
   constructor() { super(); this.jobs = []; this.running = false; }
   snapshot() { return this.jobs.map(({ sourcePath, outputPath, ...job }) => ({ ...job, downloadable: Boolean(outputPath) })); }
   emitUpdate() { this.emit("update", this.snapshot()); }
-  add({ sourcePath, sourceName, chatId, messageId, bytes }) {
-    const job = { id: randomUUID(), sourcePath, sourceName, chatId, messageId, bytes, status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
+  add({ sourcePath, sourceName, bytes }) {
+    const job = { id: randomUUID(), sourcePath, sourceName, bytes, status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
     this.jobs.unshift(job); this.emitUpdate(); this.pump(); return job;
   }
   get(id) { return this.jobs.find((job) => job.id === id); }

@@ -2,6 +2,10 @@ const jobsEl = document.querySelector('#jobs');
 const emptyEl = document.querySelector('#empty');
 const template = document.querySelector('#job-template');
 const profile = document.querySelector('#profile');
+const form = document.querySelector('#upload-form');
+const fileInput = document.querySelector('#video-file');
+const fileLabel = document.querySelector('#file-label');
+const uploadStatus = document.querySelector('#upload-status');
 const bytes = (n=0) => n < 1024 ** 2 ? `${Math.round(n/1024)} KB` : `${(n/1024**2).toFixed(1)} MB`;
 const render = (jobs) => {
   jobsEl.replaceChildren(); emptyEl.hidden = jobs.length > 0;
@@ -17,6 +21,22 @@ const render = (jobs) => {
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ const transport = health.localBotApi ? 'LOCAL 4K BOT API READY' : 'STANDARD TELEGRAM LIMITS'; profile.textContent = `${health.profile.name}  |  H.264 High  |  ${health.profile.bitrate} target / ${health.profile.maxrate} max  |  AAC ${health.profile.audioBitrate} stereo  |  ${transport}`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  H.264 High  |  ${health.profile.bitrate} target / ${health.profile.maxrate} max  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per upload`; });
+fileInput.addEventListener('change', () => { fileLabel.textContent = fileInput.files[0]?.name || 'Choose a video'; });
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const file = fileInput.files[0];
+  if (!file) return;
+  const button = form.querySelector('button');
+  button.disabled = true; uploadStatus.textContent = `Uploading ${file.name}…`;
+  try {
+    const response = await fetch('/api/uploads', { method: 'POST', body: new FormData(form) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Upload failed.');
+    uploadStatus.textContent = `${result.job.sourceName} added to the conversion queue.`;
+    form.reset(); fileLabel.textContent = 'Choose a video';
+  } catch (error) { uploadStatus.textContent = error.message; }
+  finally { button.disabled = false; }
+});
 const stream = new EventSource('/api/events'); stream.onmessage = ({data}) => render(JSON.parse(data));
 stream.onerror = () => { profile.textContent = 'Worker disconnected — make sure npm start is running.'; };
