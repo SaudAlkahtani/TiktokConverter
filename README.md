@@ -51,6 +51,24 @@ is not possible.
 4. Start it with `npm start`, then open `http://127.0.0.1:4173`.
 5. Message `/start` to the bot and send a clip as a **File**.
 
+## Move to another Windows machine
+
+Clone the private repository, install dependencies, then configure the secret
+files locally (they are intentionally never stored in GitHub):
+
+```powershell
+git clone https://github.com/SaudAlkahtani/TiktokConverter.git
+cd TiktokConverter
+npm ci
+Copy-Item .env.example .env
+```
+
+Run `scripts\configure-new-bot.ps1` to add the bot token locally. For original
+4K Telegram files, follow the Local Bot API setup in this README and run
+`scripts\enable-local-bot-api.ps1` with the Telegram application API ID/hash.
+Run only one copy of the exporter bot at a time; two machines polling the same
+bot token will conflict.
+
 ## Windows desktop shortcut
 
 The shortcut named **Luna TikTok Exporter** starts the dedicated Local Bot API
