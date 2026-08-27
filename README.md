@@ -7,23 +7,19 @@ modify any other installation.
 
 ## What the export does
 
-The `TikTok 1080p60` profile makes an MP4 with:
+The profile now matches the supplied FFmpeg reference:
 
-- 1080 × 1920 vertical canvas, preserving the whole image with black padding if
-  a clip is not vertical
-- constant 60 fps (30 fps sources are duplicated, not AI-interpolated)
-- H.264/AVC High profile, 4:2:0, `avc1`, 1-second keyframes
-- H.264 constrained VBR: 10 Mbps target / 12 Mbps maximum / 24 Mbps buffer
-- AAC stereo audio at 256 kbps and fast-start metadata
-- moderate luma/chroma sharpening (`unsharp=3:3:0.4:3:3:0.4`), Rec.709 tags,
-  1-second keyframes, and no embedded timecode track
+- `-itsscale 2`, making half-speed output; set `VIDEO_TIMESTAMP_SCALE=1` for
+  normal-speed delivery
+- `fps=60,unsharp=3:3:0.4:3:3:0.4`; no resizing or cropping is applied
+- HEVC/H.265 at 10 Mbps with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
+  `hvc1` tagging, fast-start metadata, and no embedded timecode track
+- AAC stereo audio at 256 kbps
 
-`VIDEO_TIMESTAMP_SCALE=2` is enabled in this installation as a half-speed test
-mode matching the reference command's `-itsscale 2`. Set it back to `1` in
-`.env` for normal-speed delivery. It keeps the output at 60fps by duplicating
-frames; it does not generate new interpolated motion. The exporter keeps H.264
-rather than macOS-only `hevc_videotoolbox`, matching the requested
-TikTok-compatible delivery format.
+The exact `hevc_videotoolbox` encoder in the reference is macOS-only. This
+Windows installation uses FFmpeg's `libx265` encoder to create the equivalent
+HEVC/H.265 `hvc1` output. You can set `VIDEO_CODEC` in `.env` to an available
+Windows hardware encoder such as `hevc_nvenc`, `hevc_amf`, or `hevc_qsv`.
 
 ## Source files accepted
 

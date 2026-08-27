@@ -29,25 +29,18 @@ export async function probe(input) {
 export async function render({ input, output, onProgress }) {
   const media = await probe(input);
   const filters = [
-    "scale=1080:1920:force_original_aspect_ratio=decrease:force_divisible_by=2",
-    "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black",
-    "setsar=1",
     "fps=60",
-    config.export.sharpen,
-    "format=yuv420p"
+    config.export.sharpen
   ].filter(Boolean).join(",");
   const args = [
     "-hide_banner", "-y", "-itsscale", String(config.inputTimestampScale), "-i", input,
     "-map", "0:v:0", "-map", "0:a?",
     "-vf", filters,
-    "-c:v", "libx264", "-preset", "slow", "-b:v", config.export.bitrate,
-    "-maxrate", config.export.maxrate, "-bufsize", config.export.bufsize,
-    "-profile:v", "high", "-level:v", "4.2", "-pix_fmt", "yuv420p",
-    "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
-    "-r", "60", "-fps_mode", "cfr", "-video_track_timescale", "60000", "-tag:v", "avc1",
+    "-c:v", config.export.videoCodec, "-b:v", config.export.bitrate, "-g", String(config.export.gop),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+    "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2",
-    "-movflags", "+faststart", "-write_tmcd", "0", "-progress", "pipe:1", "-nostats", output
+    "-progress", "pipe:1", "-nostats", output
   ];
   const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";

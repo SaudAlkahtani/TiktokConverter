@@ -16,12 +16,12 @@ const render = (jobs) => {
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · 1080×1920 · 60fps` : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · HEVC · 60fps` : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  H.264 High  |  ${health.profile.bitrate} target / ${health.profile.maxrate} max  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per upload`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per upload`; });
 fileInput.addEventListener('change', () => { fileLabel.textContent = fileInput.files[0]?.name || 'Choose a video'; });
 form.addEventListener('submit', async (event) => {
   event.preventDefault();

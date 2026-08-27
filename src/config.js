@@ -17,11 +17,11 @@ export const config = {
   // It prevents an accidental unlimited browser upload while still allowing 4K clips.
   maxInputBytes: gigabytes * 1024 ** 3,
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
-  inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 1)),
+  inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 2)),
   export: {
+    videoCodec: process.env.VIDEO_CODEC || "libx265",
     bitrate: process.env.VIDEO_BITRATE || "10M",
-    maxrate: process.env.VIDEO_MAXRATE || "12M",
-    bufsize: process.env.VIDEO_BUFSIZE || "24M",
+    gop: Math.max(1, Number(process.env.VIDEO_GOP || 60)),
     sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
   },
   directories: {
