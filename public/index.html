@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Luna TikTok Exporter</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">LOCAL VIDEO WORKER</p>
+        <h1>Luna <span>→</span> TikTok</h1>
+        <p class="lede">Send a 4K original to your Telegram bot. This computer makes a clean 1080p60 TikTok export and returns it to the same chat.</p>
+        <div class="profile" id="profile">Checking worker…</div>
+      </section>
+      <section class="guide">
+        <div><b>01</b><span>Send as <strong>File</strong> in Telegram</span></div>
+        <div><b>02</b><span>Keep this dashboard open</span></div>
+        <div><b>03</b><span>Receive the finished MP4</span></div>
+      </section>
+      <section class="jobs-section">
+        <div class="section-heading"><div><p class="eyebrow">PROCESSING QUEUE</p><h2>Exports</h2></div><span class="live"><i></i> LIVE</span></div>
+        <div id="empty" class="empty">No clips yet. Send an original video to your Telegram bot to begin.</div>
+        <div id="jobs" class="jobs"></div>
+      </section>
+      <aside class="note"><strong>For 4K files:</strong> Telegram’s normal bot API only downloads up to 20 MB. This worker supports Telegram’s Local Bot API Server for large originals and up to 2 GB returned files.</aside>
+    </main>
+    <template id="job-template">
+      <article class="job">
+        <div class="job-top"><div class="clip"><div class="clip-icon">▶</div><div><h3></h3><p class="metadata"></p></div></div><span class="status"></span></div>
+        <div class="bar"><span></span></div>
+        <div class="job-bottom"><span class="detail"></span><a class="download" hidden>Download export</a></div>
+      </article>
+    </template>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
