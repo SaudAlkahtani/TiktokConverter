@@ -28,6 +28,9 @@ export async function probe(input) {
 
 export async function render({ input, output, onProgress }) {
   const media = await probe(input);
+  // -itsscale changes the output timeline. Progress arrives in output time, so
+  // compare it with the scaled duration rather than the source duration.
+  const expectedDuration = media.duration * config.inputTimestampScale;
   const filters = [
     "fps=60",
     config.export.sharpen
@@ -52,7 +55,7 @@ export async function render({ input, output, onProgress }) {
     buffer = lines.pop();
     for (const line of lines) {
       const [key, value] = line.split("=");
-      if (key === "out_time_ms" && media.duration) onProgress(Math.min(99, Math.max(0, Math.round((Number(value) / 1000000 / media.duration) * 100))));
+      if (key === "out_time_ms" && expectedDuration) onProgress(Math.min(99, Math.max(0, Math.round((Number(value) / 1000000 / expectedDuration) * 100))));
     }
   });
   const [code] = await once(child, "close");

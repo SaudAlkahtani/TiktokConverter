@@ -16,7 +16,7 @@ const render = (jobs) => {
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · HEVC · 60fps` : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · HEVC · 60fps` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
