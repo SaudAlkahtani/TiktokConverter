@@ -23,12 +23,7 @@ if (-not (Test-Path (Join-Path $projectRoot 'node_modules'))) {
 
 New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
 if (-not (Test-ExporterRunning)) {
-    $bundledNode = Join-Path $projectRoot 'tools\node\node.exe'
-    if (Test-Path $bundledNode) {
-        $nodeCommand = $bundledNode
-    } else {
-        $nodeCommand = (Get-Command node.exe -ErrorAction Stop).Source
-    }
+    $nodeCommand = (Get-Command node.exe -ErrorAction Stop).Source
     Start-Process -FilePath $nodeCommand -ArgumentList 'src/server.js' -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput $logFile -RedirectStandardError $errorLogFile
     $deadline = (Get-Date).AddSeconds(20)
     while ((Get-Date) -lt $deadline) {
