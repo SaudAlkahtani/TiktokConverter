@@ -22,7 +22,9 @@ export class JobQueue extends EventEmitter {
     try {
       const safeBase = path.basename(job.sourceName, path.extname(job.sourceName)).replace(/[^a-z0-9_-]/gi, "_").slice(0, 70) || "clip";
       const outputPath = path.join(config.directories.output, `${safeBase}_hevc_60fps_${job.id.slice(0, 8)}.mp4`);
-      job.media = await render({ input: job.sourcePath, output: outputPath, options: job.options, onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
+      job.media = await render({ input: job.sourcePath, output: outputPath, options: job.options,
+        onEncoder: ({ encoder, warnings }) => { job.encoder = encoder; job.warnings = warnings; job.progress = 0; this.emitUpdate(); },
+        onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
       job.outputPath = outputPath; job.progress = 100; job.status = "complete"; job.completedAt = new Date().toISOString(); this.emitUpdate();
       this.emit("complete", job);
     } catch (error) {

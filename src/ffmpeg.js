@@ -2,15 +2,23 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
+import { encoderArgs, encoderPixelFormat, isTenBit, selectEncoder, encodeWithFallback } from "./encoders.js";
 
-export function run(command, args, onData = () => {}) {
+export function run(command, args, onData = () => {}, timeoutMs = 0) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "", stderr = "";
     child.stdout.on("data", (chunk) => { stdout = (stdout + chunk).slice(-1000000); onData(chunk.toString()); });
     child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-6000); });
-    child.once("error", reject);
-    child.once("close", (code) => code === 0 ? resolve(stdout) : reject(new Error(`Media tool exited (${code}): ${stderr.slice(-1800)}`)));
+    let timedOut = false;
+    const timer = timeoutMs ? setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs) : null;
+    child.once("error", (error) => { clearTimeout(timer); reject(error); });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      if (timedOut) reject(new Error('Media tool compatibility check timed out.'));
+      else if (code === 0) resolve(stdout);
+      else reject(new Error(`Media tool exited (${code}): ${stderr.slice(-1800)}`));
+    });
   });
 }
 
@@ -40,8 +48,8 @@ export function buildRenderArgs(media, input, output, options = {}) {
   if (![1, 2].includes(timestampScale)) throw new Error("Playback must be normal speed or half speed.");
   if (Math.min(media.width, media.height) < 16) throw new Error("HEVC requires dimensions of at least 16 pixels.");
   const odd = media.width % 2 || media.height % 2;
-  const tenBit = /10|12|16|p010/.test(media.pixelFormat || "");
-  const pixelFormat = odd ? (tenBit ? "yuv444p10le" : "yuv444p") : (tenBit ? "yuv420p10le" : "yuv420p");
+  const encoder = options.encoder ?? 'cpu';
+  const pixelFormat = encoderPixelFormat(media, encoder);
   const hdr = ["smpte2084", "arib-std-b67"].includes(media.colorTransfer);
   const warnings = [];
   if (odd) warnings.push("Odd dimensions preserved with HEVC 4:4:4; some players and upload services may not support this format.");
@@ -64,9 +72,7 @@ export function buildRenderArgs(media, input, output, options = {}) {
   filters.push(`format=${pixelFormat}`);
   const args = ["-hide_banner", "-y", "-itsscale", String(timestampScale), "-i", input,
     "-map", `0:${media.streamIndex}`, ...(media.audio ? ["-map", `0:${media.audio.index}`] : []),
-    "-vf", filters.join(","), "-c:v", "libx265", "-preset", config.export.preset,
-    "-crf", String(config.export.crf), "-g", String(config.export.gop),
-    "-x265-params", "log-level=error:pools=4", "-pix_fmt", pixelFormat,
+    "-vf", filters.join(","), ...encoderArgs(encoder), "-pix_fmt", pixelFormat,
     "-r", "60", "-fps_mode", "cfr", "-video_track_timescale", "60000",
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-map_metadata", "-1", "-map_chapters", "-1", "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0"];
@@ -77,24 +83,39 @@ export function buildRenderArgs(media, input, output, options = {}) {
   return { args, warnings, timestampScale, pixelFormat };
 }
 
-export async function render({ input, output, onProgress = () => {}, options = {} }) {
+export async function checkHardwareEncoder(encoder, media) {
+  await run(config.ffmpeg, ['-hide_banner', '-v', 'error', '-f', 'lavfi', '-i',
+    `color=size=${media.width}x${media.height}:rate=60`, '-frames:v', '2',
+    '-vf', `format=${encoderPixelFormat(media, encoder)}`, ...encoderArgs(encoder),
+    '-pix_fmt', encoderPixelFormat(media, encoder), '-f', 'null', '-'], () => {}, 15000);
+}
+
+export async function render({ input, output, onProgress = () => {}, onEncoder = () => {}, options = {} }) {
   const source = await probe(input);
-  const { args, warnings, timestampScale } = buildRenderArgs(source, input, output, options);
+  const requestedEncoder = options.encoder ?? 'cpu';
+  // Validate playback and dimensions before attempting a hardware check.
+  const { warnings, timestampScale } = buildRenderArgs(source, input, output, { ...options, encoder: 'cpu' });
+  const selection = await selectEncoder(source, requestedEncoder, checkHardwareEncoder);
   const expectedDuration = source.duration * timestampScale;
   let buffer = "";
   try {
-    await run(config.ffmpeg, args, (chunk) => {
-      buffer += chunk;
-      const lines = buffer.split(/\r?\n/); buffer = lines.pop();
-      for (const line of lines) {
-        const [key, value] = line.split("=");
-        if (key === "out_time_us" && expectedDuration) onProgress(Math.min(99, Math.max(0, Math.round(Number(value) / 1000000 / expectedDuration * 100))));
-      }
-    });
+    const actual = await encodeWithFallback(selection, async (encoder) => {
+      buffer = ''; onProgress(0);
+      const { args } = buildRenderArgs(source, input, output, { ...options, encoder });
+      await run(config.ffmpeg, args, (chunk) => {
+        buffer += chunk;
+        const lines = buffer.split(/\r?\n/); buffer = lines.pop();
+        for (const line of lines) {
+          const [key, value] = line.split("=");
+          if (key === "out_time_us" && expectedDuration) onProgress(Math.min(99, Math.max(0, Math.round(Number(value) / 1000000 / expectedDuration * 100))));
+        }
+      });
+    }, onEncoder);
     const result = await probe(output);
     if (result.width !== source.width || result.height !== source.height || result.fps !== "60/1") throw new Error("Output validation failed: dimensions or frame rate changed unexpectedly.");
+    if (result.codec !== 'hevc' || isTenBit(result) !== isTenBit(source)) throw new Error('Output validation failed: codec or bit depth changed unexpectedly.');
     const stat = await fs.stat(output);
-    return { ...result, source, warnings, timestampScale, bytes: stat.size, output: path.basename(output) };
+    return { ...result, source, warnings: [...warnings, ...actual.warnings], encoder: actual.encoder, requestedEncoder, timestampScale, bytes: stat.size, output: path.basename(output) };
   } catch (error) {
     await fs.rm(output, { force: true });
     throw error;

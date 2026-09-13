@@ -32,8 +32,58 @@ remains; set `VIDEO_TIMESTAMP_SCALE=1` for a normal-speed default.
 
 Quality mode deliberately replaces the legacy VIDEO_BITRATE, VIDEO_CODEC and
 VIDEO_SHARPEN overrides. Set `VIDEO_CRF` (12–28; default 18) to trade file size
-against quality. This profile uses software libx265 to keep behavior consistent.
+against quality in CPU mode. CPU mode uses software libx265.
 High-resolution slow-preset encoding can take longer and produce larger files.
+
+## CPU / AMD / NVIDIA buttons
+
+Choose an encoding engine before uploading. The browser remembers the choice
+locally on each machine; it applies only to new uploads, never to an active job.
+
+| Button | HEVC encoding settings | Recommended machine |
+| --- | --- | --- |
+| CPU Quality (default) | libx265 slow, CRF 18 | Any machine; compatibility fallback |
+| AMD Fast | hevc_amf, quality, CQP I=18 / P=20 | Radeon RX 9060 XT here |
+| NVIDIA Fast | hevc_nvenc, P6 / HQ, VBR CQ 18, spatial AQ, lookahead 20 | Home RTX 4070 Ti |
+
+All modes keep source dimensions, 60fps, selected playback speed, sharpening,
+Rec.709 conversion, and AAC audio processing. GPU mode accelerates encoding;
+decoding and these filters still run on the CPU. CRF, CQ and QP numbers are not
+equivalent quality scales. Hardware output is not guaranteed to match CPU output
+or TikTok's final compression. Bitrate varies with the footage rather than using
+a fixed 10 Mbps cap at every resolution.
+
+Each GPU export first runs a short real encode at the input dimensions (15-second
+timeout). Missing GPU, unsupported size or driver failure selects CPU with a
+visible warning. A GPU failure during export retries once on CPU and resets
+progress. Jobs display the actual encoder and fallback reason. Odd dimensions
+always use CPU to preserve every pixel. AMD 10-bit inputs use CPU because the
+bundled AMF profile is 8-bit only; NVIDIA uses P010 for 10-bit HEVC output.
+
+On the home PC, install a current NVIDIA driver, update this branch, run `npm ci`,
+start the app, and select **NVIDIA Fast**. No CUDA toolkit or paid encoder is
+required. If CPU fallback appears, check the driver and any `FFMPEG_PATH`
+override. The binary must include `hevc_nvenc` (NVIDIA) or `hevc_amf` (AMD).
+
+```powershell
+git switch local-upload-workflow
+git pull --ff-only origin local-upload-workflow
+npm ci
+.\Start-Local-Converter.cmd
+```
+
+To require a physical GPU in the upload test (instead of allowing fallback):
+
+```powershell
+$env:TEST_REQUIRE_GPU = 'nvidia' # use 'amd' on the Radeon machine
+npm test
+Remove-Item Env:TEST_REQUIRE_GPU
+```
+
+AMD encoding was physically verified on the RX 9060 XT. NVIDIA command building
+and fallback are tested here; physical NVENC verification must run on the home PC.
+Reference: [AMD AMF settings](https://github.com/GPUOpen-LibrariesAndSDKs/AMF/wiki/AMF-Encoder-Settings-and-Tuning-in-FFmpeg)
+and [NVIDIA FFmpeg guide](https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/ffmpeg-with-nvidia-gpu/index.html).
 
 ## Source files accepted
 

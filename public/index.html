@@ -29,6 +29,15 @@
           <label>Playback <select id="speed"><option value="1">Normal speed</option><option value="2">Half speed (2× duration)</option></select></label>
           <label><input type="checkbox" id="sharpen" checked /> Gentle detail enhancement</label>
         </div>
+        <fieldset class="encoder-picker" aria-describedby="encoder-hint">
+          <legend>Encoding engine</legend>
+          <div class="encoder-buttons">
+            <label><input type="radio" name="encoder" value="cpu" checked /><span>CPU Quality<small>Software · widest compatibility</small></span></label>
+            <label><input type="radio" name="encoder" value="amd" /><span>AMD Fast<small>Radeon · RX 9060 XT</small></span></label>
+            <label><input type="radio" name="encoder" value="nvidia" /><span>NVIDIA Fast<small>NVENC · RTX 4070 Ti</small></span></label>
+          </div>
+          <p class="upload-status" id="encoder-hint" aria-live="polite">CPU: high-quality HEVC, slow preset, CRF 18.</p>
+        </fieldset>
         <p class="upload-status">Original dimensions preserved. HDR is converted to SDR; audio follows playback speed. 60fps uses frame duplication, not AI interpolation.</p>
         <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server.</p>
       </section>

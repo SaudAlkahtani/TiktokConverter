@@ -45,14 +45,37 @@ test('local upload → queue → verified download, with rejected invalid upload
     assert.equal(done.status, 'complete', done?.error);
     assert.equal(done.media.width, 480); assert.equal(done.media.height, 640);
     assert.equal(done.media.timestampScale, 1); assert.equal(done.options.sharpen, false);
+    assert.equal(done.media.encoder, 'cpu');
     const downloaded = await fetch(`${url}/api/jobs/${job.id}/download`);
     assert.equal(downloaded.status, 200); assert.match(downloaded.headers.get('content-disposition'), /attachment/);
     const target = path.join(root, 'download.mp4'); await fs.writeFile(target, Buffer.from(await downloaded.arrayBuffer()));
     assert.equal((await probe(target)).fps, '60/1');
     assert.equal((await fetch(`${url}/api/uploads?speed=99`, { method: 'POST', body: form })).status, 400);
+    assert.equal((await fetch(`${url}/api/uploads?encoder=invalid`, { method: 'POST', body: form })).status, 400);
+    // This passes on CPU-only machines too: unavailable GPUs must fall back.
+    for (const encoder of ['amd', 'nvidia']) {
+      const response = await fetch(`${url}/api/uploads?speed=2&encoder=${encoder}`, { method: 'POST', body: form });
+      assert.equal(response.status, 202);
+      const acceptedJob = (await response.json()).job;
+      let gpuJob;
+      for (let attempt = 0; attempt < 400; attempt++) {
+        gpuJob = (await (await fetch(`${url}/api/jobs`)).json()).find(x => x.id === acceptedJob.id);
+        if (['complete', 'failed'].includes(gpuJob?.status)) break;
+        await delay(100);
+      }
+      assert.equal(gpuJob.status, 'complete', gpuJob?.error);
+      assert.equal(gpuJob.options.encoder, encoder);
+      assert.equal(gpuJob.media.requestedEncoder, encoder);
+      assert.ok(['cpu', encoder].includes(gpuJob.media.encoder));
+      if (process.env.TEST_REQUIRE_GPU === encoder) assert.equal(gpuJob.media.encoder, encoder, 'required physical GPU must encode successfully');
+      if (gpuJob.media.encoder === 'cpu') assert.ok(gpuJob.media.warnings.length);
+      assert.equal(gpuJob.media.width, 480); assert.equal(gpuJob.media.height, 640);
+      assert.equal(gpuJob.media.fps, '60/1');
+      assert.ok(Math.abs(gpuJob.media.duration - 40 / 60) < 0.04);
+    }
     const invalid = new FormData(); invalid.set('video', new Blob(['plain text']), 'bad.mp4');
     assert.equal((await fetch(`${url}/api/uploads`, { method: 'POST', body: invalid })).status, 400);
-    assert.equal((await fs.readdir(path.join(root, 'incoming'))).length, 1, 'failed upload cleaned up, original valid upload kept');
+    assert.equal((await fs.readdir(path.join(root, 'incoming'))).length, 3, 'failed upload cleaned up, original valid uploads kept');
   } finally {
     child.kill(); await exited;
     await fs.rm(root, { recursive: true, force: true });

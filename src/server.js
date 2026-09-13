@@ -9,6 +9,7 @@ import multipart from "@fastify/multipart";
 import { config } from "./config.js";
 import { JobQueue } from "./queue.js";
 import { probe } from "./ffmpeg.js";
+import { isEncoder } from "./encoders.js";
 
 const app = Fastify({ logger: true });
 const queue = new JobQueue();
@@ -25,7 +26,9 @@ app.post("/api/uploads", async (request, reply) => {
   try {
     const timestampScale = Number(request.query.speed ?? config.inputTimestampScale);
     if (![1, 2].includes(timestampScale) || ![undefined, "true", "false"].includes(request.query.sharpen)) return reply.code(400).send({ error: "Choose normal or half speed and a valid detail setting." });
-    const options = { timestampScale, sharpen: request.query.sharpen !== "false" };
+    const encoder = request.query.encoder ?? 'cpu';
+    if (!isEncoder(encoder)) return reply.code(400).send({ error: 'Choose CPU, AMD, or NVIDIA encoding.' });
+    const options = { timestampScale, sharpen: request.query.sharpen !== "false", encoder };
     const file = await request.file();
     if (!file) return reply.code(400).send({ error: "Choose a video file first." });
 
