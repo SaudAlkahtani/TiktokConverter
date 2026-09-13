@@ -1,70 +1,104 @@
 import { spawn } from "node:child_process";
-import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 
-const run = async (command, args) => {
-  const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-  let stderr = "";
-  child.stderr.on("data", (chunk) => { stderr += chunk; });
-  const [code] = await once(child, "close");
-  if (code !== 0) throw new Error(`${command} exited with code ${code}: ${stderr.slice(-1800)}`);
-};
-
-export async function probe(input) {
-  const child = spawn(config.ffprobe, ["-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate", "-of", "json", input], { windowsHide: true });
-  let stdout = "";
-  let stderr = "";
-  child.stdout.on("data", (chunk) => { stdout += chunk; });
-  child.stderr.on("data", (chunk) => { stderr += chunk; });
-  const [code] = await once(child, "close");
-  if (code !== 0) throw new Error(`ffprobe failed: ${stderr}`);
-  const info = JSON.parse(stdout);
-  const video = info.streams.find((stream) => stream.codec_type === "video") || {};
-  if (!video.width || !video.height) throw new Error("No readable video stream was found in this file.");
-  return { duration: Number(info.format?.duration || 0), width: video.width, height: video.height, fps: video.r_frame_rate };
+export function run(command, args, onData = () => {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", (chunk) => { stdout = (stdout + chunk).slice(-1000000); onData(chunk.toString()); });
+    child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-6000); });
+    child.once("error", reject);
+    child.once("close", (code) => code === 0 ? resolve(stdout) : reject(new Error(`Media tool exited (${code}): ${stderr.slice(-1800)}`)));
+  });
 }
 
-export async function render({ input, output, onProgress }) {
-  const media = await probe(input);
-  // -itsscale changes the output timeline. Progress arrives in output time, so
-  // compare it with the scaled duration rather than the source duration.
-  const expectedDuration = media.duration * config.inputTimestampScale;
-  const filters = [
-    "fps=60",
-    config.export.sharpen
-  ].filter(Boolean).join(",");
-  const args = [
-    "-hide_banner", "-y", "-itsscale", String(config.inputTimestampScale), "-i", input,
-    "-map", "0:v:0", "-map", "0:a?",
-    "-vf", filters,
-    "-c:v", config.export.videoCodec, "-b:v", config.export.bitrate, "-g", String(config.export.gop),
-    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-    "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0", "-pix_fmt", "yuv420p",
-    "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2",
-    "-progress", "pipe:1", "-nostats", output
-  ];
-  const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-  let stderr = "";
-  let buffer = "";
-  child.stderr.on("data", (chunk) => { stderr += chunk; });
-  child.stdout.on("data", (chunk) => {
-    buffer += chunk.toString();
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop();
-    for (const line of lines) {
-      const [key, value] = line.split("=");
-      if (key === "out_time_ms" && expectedDuration) onProgress(Math.min(99, Math.max(0, Math.round((Number(value) / 1000000 / expectedDuration) * 100))));
-    }
-  });
-  const [code] = await once(child, "close");
-  if (code !== 0) {
-    await fs.rm(output, { force: true });
-    throw new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-1800)}`);
+export async function probe(input) {
+  let info;
+  try { info = JSON.parse(await run(config.ffprobe, ["-v", "error", "-show_streams", "-show_format", "-of", "json", input])); }
+  catch { throw new Error("ffprobe failed: this file could not be read as video."); }
+  const video = info.streams?.find((s) => s.codec_type === "video" && !s.disposition?.attached_pic);
+  if (!video?.width || !video?.height) throw new Error("No readable video stream was found in this file.");
+  const rotation = Number(video.side_data_list?.find((s) => s.rotation !== undefined)?.rotation || video.tags?.rotate || 0);
+  const swapped = Math.abs(rotation % 180) === 90;
+  const audio = info.streams.find((s) => s.codec_type === "audio");
+  return {
+    width: swapped ? video.height : video.width, height: swapped ? video.width : video.height,
+    codedWidth: video.width, codedHeight: video.height, rotation, streamIndex: video.index,
+    fps: video.avg_frame_rate !== "0/0" ? video.avg_frame_rate : video.r_frame_rate,
+    duration: Number(video.duration || info.format?.duration || 0),
+    codec: video.codec_name, pixelFormat: video.pix_fmt, sampleAspectRatio: video.sample_aspect_ratio,
+    colorSpace: video.color_space, colorTransfer: video.color_transfer, colorPrimaries: video.color_primaries,
+    colorRange: video.color_range,
+    audio: audio ? { index: audio.index, codec: audio.codec_name, channels: audio.channels, duration: Number(audio.duration || info.format?.duration || 0) } : null
+  };
+}
+
+export function buildRenderArgs(media, input, output, options = {}) {
+  const timestampScale = Number(options.timestampScale ?? config.inputTimestampScale);
+  if (![1, 2].includes(timestampScale)) throw new Error("Playback must be normal speed or half speed.");
+  if (Math.min(media.width, media.height) < 16) throw new Error("HEVC requires dimensions of at least 16 pixels.");
+  const odd = media.width % 2 || media.height % 2;
+  const tenBit = /10|12|16|p010/.test(media.pixelFormat || "");
+  const pixelFormat = odd ? (tenBit ? "yuv444p10le" : "yuv444p") : (tenBit ? "yuv420p10le" : "yuv420p");
+  const hdr = ["smpte2084", "arib-std-b67"].includes(media.colorTransfer);
+  const warnings = [];
+  if (odd) warnings.push("Odd dimensions preserved with HEVC 4:4:4; some players and upload services may not support this format.");
+  const filters = ["setpts=PTS-STARTPTS"];
+  if (hdr) {
+    const transfer = media.colorTransfer === "smpte2084" ? "smpte2084" : "arib-std-b67";
+    filters.push(`zscale=pin=${media.colorPrimaries || "bt2020"}:tin=${transfer}:min=${media.colorSpace || "bt2020nc"}:rin=${media.colorRange === "pc" ? "full" : "limited"}:t=linear:npl=100`,
+      "format=gbrpf32le", "zscale=p=bt709", "tonemap=tonemap=mobius:desat=2", "zscale=t=bt709:m=bt709:r=limited");
+    warnings.push("HDR converted to SDR Rec.709. Review highlights before publishing.");
+  } else {
+    const known = (value) => value && !["unknown", "unspecified", "reserved"].includes(value);
+    const primaries = known(media.colorPrimaries) ? media.colorPrimaries : "bt709";
+    const transfer = known(media.colorTransfer) ? media.colorTransfer : "bt709";
+    const matrix = known(media.colorSpace) ? media.colorSpace : "bt709";
+    filters.push(`zscale=pin=${primaries}:tin=${transfer}:min=${matrix}:rin=${media.colorRange === "pc" ? "full" : "limited"}:p=bt709:t=bt709:m=bt709:r=limited`);
+    if (!known(media.colorTransfer)) warnings.push("Untagged footage assumed SDR Rec.709; apply the correct camera LUT to log footage before upload.");
   }
-  const stat = await fs.stat(output);
-  return { ...media, bytes: stat.size, output: path.basename(output) };
+  filters.push("fps=60");
+  if (options.sharpen !== false) filters.push(config.export.sharpen);
+  filters.push(`format=${pixelFormat}`);
+  const args = ["-hide_banner", "-y", "-itsscale", String(timestampScale), "-i", input,
+    "-map", `0:${media.streamIndex}`, ...(media.audio ? ["-map", `0:${media.audio.index}`] : []),
+    "-vf", filters.join(","), "-c:v", "libx265", "-preset", config.export.preset,
+    "-crf", String(config.export.crf), "-g", String(config.export.gop),
+    "-x265-params", "log-level=error:pools=4", "-pix_fmt", pixelFormat,
+    "-r", "60", "-fps_mode", "cfr", "-video_track_timescale", "60000",
+    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+    "-map_metadata", "-1", "-map_chapters", "-1", "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0"];
+  // Scaling packet timestamps alone leaves audio gaps. Rebuild sample timestamps
+  // and stretch the sound while preserving pitch to match the video duration.
+  if (media.audio) args.push("-af", `asetpts=N/SR/TB,atempo=${1 / timestampScale}`, "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2");
+  args.push("-progress", "pipe:1", "-nostats", output);
+  return { args, warnings, timestampScale, pixelFormat };
+}
+
+export async function render({ input, output, onProgress = () => {}, options = {} }) {
+  const source = await probe(input);
+  const { args, warnings, timestampScale } = buildRenderArgs(source, input, output, options);
+  const expectedDuration = source.duration * timestampScale;
+  let buffer = "";
+  try {
+    await run(config.ffmpeg, args, (chunk) => {
+      buffer += chunk;
+      const lines = buffer.split(/\r?\n/); buffer = lines.pop();
+      for (const line of lines) {
+        const [key, value] = line.split("=");
+        if (key === "out_time_us" && expectedDuration) onProgress(Math.min(99, Math.max(0, Math.round(Number(value) / 1000000 / expectedDuration * 100))));
+      }
+    });
+    const result = await probe(output);
+    if (result.width !== source.width || result.height !== source.height || result.fps !== "60/1") throw new Error("Output validation failed: dimensions or frame rate changed unexpectedly.");
+    const stat = await fs.stat(output);
+    return { ...result, source, warnings, timestampScale, bytes: stat.size, output: path.basename(output) };
+  } catch (error) {
+    await fs.rm(output, { force: true });
+    throw error;
+  }
 }
 
 export async function validateTools() {

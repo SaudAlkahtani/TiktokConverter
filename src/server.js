@@ -18,11 +18,14 @@ await app.register(multipart, { limits: { files: 1, fileSize: config.uploadLimit
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: "HEVC 60fps", codec: config.export.videoCodec, bitrate: config.export.bitrate, gop: config.export.gop, audioBitrate: "256k" } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: "Original resolution • HEVC 60fps", codec: config.export.videoCodec, crf: config.export.crf, timestampScale: config.inputTimestampScale, gop: config.export.gop, audioBitrate: "256k" } }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.post("/api/uploads", async (request, reply) => {
   let target;
   try {
+    const timestampScale = Number(request.query.speed ?? config.inputTimestampScale);
+    if (![1, 2].includes(timestampScale) || ![undefined, "true", "false"].includes(request.query.sharpen)) return reply.code(400).send({ error: "Choose normal or half speed and a valid detail setting." });
+    const options = { timestampScale, sharpen: request.query.sharpen !== "false" };
     const file = await request.file();
     if (!file) return reply.code(400).send({ error: "Choose a video file first." });
 
@@ -34,7 +37,7 @@ app.post("/api/uploads", async (request, reply) => {
 
     const stat = await fs.stat(target);
     const source = await probe(target);
-    const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size });
+    const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size, options, source });
     return reply.code(202).send({ job: { id: job.id, sourceName, bytes: stat.size }, source });
   } catch (error) {
     if (target) await fs.rm(target, { force: true });

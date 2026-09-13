@@ -19,10 +19,11 @@ export const config = {
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
   inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 2)),
   export: {
-    videoCodec: process.env.VIDEO_CODEC || "libx265",
-    bitrate: process.env.VIDEO_BITRATE || "10M",
+    videoCodec: "libx265",
+    crf: Math.min(28, Math.max(12, Number(process.env.VIDEO_CRF || 18))),
+    preset: "slow",
     gop: Math.max(1, Number(process.env.VIDEO_GOP || 60)),
-    sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
+    sharpen: "unsharp=3:3:0.3:3:3:0"
   },
   directories: {
     incoming: path.join(mediaRoot, "incoming"),
