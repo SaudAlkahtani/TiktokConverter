@@ -20,7 +20,8 @@ export const config = {
   inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 2)),
   export: {
     videoCodec: process.env.VIDEO_CODEC || "libx265",
-    bitrate: process.env.VIDEO_BITRATE || "10M",
+    // Every export is constant 60 fps, so use the higher 20 Mbps target.
+    bitrate: process.env.VIDEO_BITRATE || "20M",
     gop: Math.max(1, Number(process.env.VIDEO_GOP || 60)),
     sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
   },
