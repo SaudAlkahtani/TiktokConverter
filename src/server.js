@@ -14,34 +14,44 @@ const app = Fastify({ logger: true });
 const queue = new JobQueue();
 await queue.prepare();
 await app.register(fastifyStatic, { root: path.join(config.root, "public"), prefix: "/" });
-await app.register(multipart, { limits: { files: 1, fileSize: config.uploadLimitBytes } });
+await app.register(multipart, { limits: { files: config.maxUploadFiles, fileSize: config.uploadLimitBytes } });
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: "HEVC 60fps", codec: config.export.videoCodec, bitrate: config.export.bitrate, gop: config.export.gop, audioBitrate: "256k" } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "HEVC 60fps", codec: config.export.videoCodec, bitrate: config.export.bitrate, gop: config.export.gop, audioBitrate: "256k" } }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.post("/api/uploads", async (request, reply) => {
-  let target;
+  const accepted = [];
+  const rejected = [];
   try {
-    const file = await request.file();
-    if (!file) return reply.code(400).send({ error: "Choose a video file first." });
+    for await (const file of request.files()) {
+      let target;
+      const sourceName = safeName(file.filename);
+      try {
+        const storedName = `${Date.now()}-${randomUUID()}-${sourceName}`;
+        target = path.join(config.directories.incoming, storedName);
+        await pipeline(file.file, fssync.createWriteStream(target, { flags: "wx" }));
+        if (file.file.truncated) throw new Error("The upload is larger than this server's configured limit.");
 
-    const sourceName = safeName(file.filename);
-    const storedName = `${Date.now()}-${randomUUID()}-${sourceName}`;
-    target = path.join(config.directories.incoming, storedName);
-    await pipeline(file.file, fssync.createWriteStream(target, { flags: "wx" }));
-    if (file.file.truncated) throw new Error("The upload is larger than this server's configured limit.");
-
-    const stat = await fs.stat(target);
-    const source = await probe(target);
-    const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size });
-    return reply.code(202).send({ job: { id: job.id, sourceName, bytes: stat.size }, source });
+        const stat = await fs.stat(target);
+        const source = await probe(target);
+        const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size });
+        accepted.push({ id: job.id, sourceName, bytes: stat.size, source });
+      } catch (error) {
+        if (target) await fs.rm(target, { force: true });
+        const tooLarge = error.code === "FST_REQ_FILE_TOO_LARGE" || error.message.includes("configured limit");
+        const unreadable = error.message.includes("No readable video stream") || error.message.startsWith("ffprobe failed");
+        rejected.push({ sourceName, error: tooLarge ? "This file exceeds the upload limit." : unreadable ? "FFmpeg could not read this file as a video." : "The upload could not be processed." });
+        request.log.warn({ err: error, sourceName }, "Upload was rejected");
+      }
+    }
+    if (!accepted.length) return reply.code(rejected.some((item) => item.error.includes("limit")) ? 413 : 400).send({ error: rejected[0]?.error || "Choose one or more video files first.", rejected });
+    // Keep `job` for older clients while exposing every accepted upload.
+    return reply.code(202).send({ job: accepted[0], jobs: accepted, rejected });
   } catch (error) {
-    if (target) await fs.rm(target, { force: true });
     request.log.warn({ err: error }, "Upload was rejected");
-    const tooLarge = error.code === "FST_REQ_FILE_TOO_LARGE" || error.message.includes("configured limit");
-    const unreadable = error.message.includes("No readable video stream") || error.message.startsWith("ffprobe failed");
-    return reply.code(tooLarge ? 413 : 400).send({ error: tooLarge ? "This file exceeds the upload limit." : unreadable ? "FFmpeg could not read this file as a video." : "The upload could not be processed. Please try another video file." });
+    const tooLarge = error.code === "FST_REQ_FILE_TOO_LARGE" || error.code === "FST_FILES_LIMIT";
+    return reply.code(tooLarge ? 413 : 400).send({ error: tooLarge ? `Upload limit reached (up to ${config.maxUploadFiles} files).` : "The upload could not be processed. Please try another video file.", rejected });
   }
 });
 app.get("/api/jobs/:id/download", async (request, reply) => {

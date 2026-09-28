@@ -11,7 +11,8 @@ export class JobQueue extends EventEmitter {
   emitUpdate() { this.emit("update", this.snapshot()); }
   add({ sourcePath, sourceName, bytes }) {
     const job = { id: randomUUID(), sourcePath, sourceName, bytes, status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
-    this.jobs.unshift(job); this.emitUpdate(); this.pump(); return job;
+    // Append so the oldest waiting upload always starts next (FIFO).
+    this.jobs.push(job); this.emitUpdate(); this.pump(); return job;
   }
   get(id) { return this.jobs.find((job) => job.id === id); }
   async pump() {

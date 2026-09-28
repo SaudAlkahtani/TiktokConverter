@@ -21,20 +21,25 @@ const render = (jobs) => {
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per upload`; });
-fileInput.addEventListener('change', () => { fileLabel.textContent = fileInput.files[0]?.name || 'Choose a video'; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
+fileInput.addEventListener('change', () => {
+  const files = [...fileInput.files];
+  fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;
+});
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const file = fileInput.files[0];
-  if (!file) return;
+  const files = [...fileInput.files];
+  if (!files.length) return;
   const button = form.querySelector('button');
-  button.disabled = true; uploadStatus.textContent = `Uploading ${file.name}…`;
+  button.disabled = true; uploadStatus.textContent = `Uploading ${files.length} video${files.length === 1 ? '' : 's'}…`;
   try {
     const response = await fetch('/api/uploads', { method: 'POST', body: new FormData(form) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Upload failed.');
-    uploadStatus.textContent = `${result.job.sourceName} added to the conversion queue.`;
-    form.reset(); fileLabel.textContent = 'Choose a video';
+    const accepted = result.jobs || (result.job ? [result.job] : []);
+    const rejected = result.rejected || [];
+    uploadStatus.textContent = `${accepted.length} video${accepted.length === 1 ? '' : 's'} added in first-in, first-out order.${rejected.length ? ` ${rejected.length} could not be added.` : ''}`;
+    form.reset(); fileLabel.textContent = 'Choose videos';
   } catch (error) { uploadStatus.textContent = error.message; }
   finally { button.disabled = false; }
 });

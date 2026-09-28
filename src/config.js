@@ -7,6 +7,7 @@ import bundledFfprobe from "ffprobe-static";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mediaRoot = path.resolve((process.env.MEDIA_ROOT || root).trim());
 const gigabytes = Math.max(0, Number(process.env.MAX_INPUT_GB || 0));
+const uploadFiles = Math.max(1, Math.min(100, Number(process.env.MAX_UPLOAD_FILES) || 20));
 
 export const config = {
   root,
@@ -17,6 +18,7 @@ export const config = {
   // It prevents an accidental unlimited browser upload while still allowing 4K clips.
   maxInputBytes: gigabytes * 1024 ** 3,
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
+  maxUploadFiles: uploadFiles,
   inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 2)),
   export: {
     videoCodec: process.env.VIDEO_CODEC || "libx265",
