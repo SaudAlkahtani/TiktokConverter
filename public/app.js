@@ -6,6 +6,8 @@ const form = document.querySelector('#upload-form');
 const fileInput = document.querySelector('#video-file');
 const fileLabel = document.querySelector('#file-label');
 const uploadStatus = document.querySelector('#upload-status');
+const clearActiveButton = document.querySelector('#clear-active');
+const clearCompletedButton = document.querySelector('#clear-completed');
 const bytes = (n=0) => n < 1024 ** 2 ? `${Math.round(n/1024)} KB` : `${(n/1024**2).toFixed(1)} MB`;
 const render = (jobs) => {
   jobsEl.replaceChildren(); emptyEl.hidden = jobs.length > 0;
@@ -43,5 +45,24 @@ form.addEventListener('submit', async (event) => {
   } catch (error) { uploadStatus.textContent = error.message; }
   finally { button.disabled = false; }
 });
+const clearJobs = async (kind, button) => {
+  const isActive = kind === 'active';
+  const message = isActive
+    ? 'Cancel and remove every queued or processing job? Source and exported files will stay on this computer.'
+    : 'Remove all completed conversion records? Exported files will stay on this computer.';
+  if (!window.confirm(message)) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/jobs/${kind}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not clear the records.');
+    uploadStatus.textContent = result.cleared
+      ? `${result.cleared} ${isActive ? 'active job' : 'completed conversion'}${result.cleared === 1 ? '' : 's'} cleared. Files were kept.`
+      : `No ${isActive ? 'active jobs' : 'completed conversions'} to clear.`;
+  } catch (error) { uploadStatus.textContent = error.message; }
+  finally { button.disabled = false; }
+};
+clearActiveButton.addEventListener('click', () => clearJobs('active', clearActiveButton));
+clearCompletedButton.addEventListener('click', () => clearJobs('completed', clearCompletedButton));
 const stream = new EventSource('/api/events'); stream.onmessage = ({data}) => render(JSON.parse(data));
 stream.onerror = () => { profile.textContent = 'Worker disconnected — make sure npm start is running.'; };

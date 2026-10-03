@@ -26,8 +26,21 @@ export async function probe(input) {
   return { duration: Number(info.format?.duration || 0), width: video.width, height: video.height, fps: video.r_frame_rate };
 }
 
-export async function render({ input, output, onProgress }) {
+export class RenderCancelledError extends Error {
+  constructor() {
+    super("Conversion was cancelled.");
+    this.name = "RenderCancelledError";
+  }
+}
+
+const throwIfAborted = (signal) => {
+  if (signal?.aborted) throw new RenderCancelledError();
+};
+
+export async function render({ input, output, onProgress, signal }) {
+  throwIfAborted(signal);
   const media = await probe(input);
+  throwIfAborted(signal);
   // -itsscale changes the output timeline. Progress arrives in output time, so
   // compare it with the scaled duration rather than the source duration.
   const expectedDuration = media.duration * config.inputTimestampScale;
@@ -46,6 +59,8 @@ export async function render({ input, output, onProgress }) {
     "-progress", "pipe:1", "-nostats", output
   ];
   const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  const stop = () => child.kill();
+  signal?.addEventListener("abort", stop, { once: true });
   let stderr = "";
   let buffer = "";
   child.stderr.on("data", (chunk) => { stderr += chunk; });
@@ -58,13 +73,18 @@ export async function render({ input, output, onProgress }) {
       if (key === "out_time_ms" && expectedDuration) onProgress(Math.min(99, Math.max(0, Math.round((Number(value) / 1000000 / expectedDuration) * 100))));
     }
   });
-  const [code] = await once(child, "close");
-  if (code !== 0) {
+  try {
+    const [code] = await once(child, "close");
+    throwIfAborted(signal);
+    if (code !== 0) throw new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-1800)}`);
+    const stat = await fs.stat(output);
+    return { ...media, bytes: stat.size, output: path.basename(output) };
+  } catch (error) {
     await fs.rm(output, { force: true });
-    throw new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-1800)}`);
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", stop);
   }
-  const stat = await fs.stat(output);
-  return { ...media, bytes: stat.size, output: path.basename(output) };
 }
 
 export async function validateTools() {
