@@ -11,7 +11,7 @@
       <section class="hero">
         <p class="eyebrow">LOCAL VIDEO WORKER</p>
         <h1>Local <span>→</span> Export</h1>
-        <p class="lede">Prepare your video with Khaled’s method on Windows: high-quality H.264 followed by the MP4 container patch. Compare normal playback with half-speed slow motion at your source frame rate up to 120fps.</p>
+        <p class="lede">Prepare your video with Khaled’s method on Windows: high-quality H.264 followed by the MP4 container patch. Keep normal playback and your source frame rate up to 120fps.</p>
         <div class="profile" id="profile">Checking worker…</div>
       </section>
       <section class="guide">
@@ -27,10 +27,8 @@
         </form>
         <div class="export-options">
           <label>Output size <select id="resolution"><option value="1080">1080p</option><option value="1440">1440p / 2K</option><option value="2160">2160p / 4K</option><option value="0">Original dimensions</option></select></label>
-          <label>Playback <select id="speed"><option value="1">Normal speed</option><option value="2" selected>Half speed (2× duration)</option></select></label>
         </div>
         <p class="upload-status">Resolution sets the shorter edge. Smaller sources are never enlarged. HDR becomes SDR; odd dimensions round down by one pixel.</p>
-        <p class="upload-status">Half speed stretches audio with its pitch preserved and repeats video frames; it does not generate new motion frames.</p>
         <p class="upload-status">Experimental upload method. The MP4 declares ghost samples; these do not create motion frames. Some players report unusual metadata or decoding warnings.</p>
         <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server.</p>
       </section>

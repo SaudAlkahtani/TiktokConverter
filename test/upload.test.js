@@ -33,7 +33,7 @@ test('local upload → queue → verified download, with rejected invalid upload
     const fixture = path.join(root, 'fixture.mkv');
     await run(config.ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=480x640:rate=60', '-frames:v', '20', '-c:v', 'libx264', '-y', fixture]);
     const form = new FormData(); form.set('video', new Blob([await fs.readFile(fixture)]), 'camera.no-extension');
-    const accepted = await fetch(`${url}/api/uploads?resolution=1080&speed=1`, { method: 'POST', body: form });
+    const accepted = await fetch(`${url}/api/uploads?resolution=1080`, { method: 'POST', body: form });
     assert.equal(accepted.status, 202);
     const { job } = await accepted.json();
     let done;
@@ -50,25 +50,11 @@ test('local upload → queue → verified download, with rejected invalid upload
     assert.equal(downloaded.status, 200); assert.match(downloaded.headers.get('content-disposition'), /attachment/);
     const target = path.join(root, 'download.mp4'); await fs.writeFile(target, Buffer.from(await downloaded.arrayBuffer()));
     assert.equal((await probe(target)).codec, 'h264');
-    const slowResponse = await fetch(`${url}/api/uploads?resolution=1080&speed=2`, { method: 'POST', body: form });
-    assert.equal(slowResponse.status, 202);
-    const slowId = (await slowResponse.json()).job.id;
-    let slowJob;
-    for (let attempt = 0; attempt < 200; attempt++) {
-      slowJob = (await (await fetch(`${url}/api/jobs`)).json()).find(x => x.id === slowId);
-      if (['complete', 'failed'].includes(slowJob?.status)) break;
-      await delay(100);
-    }
-    assert.equal(slowJob.status, 'complete', slowJob.error);
-    assert.equal(slowJob.media.timestampScale, 2);
-    assert.ok(Math.abs(slowJob.media.duration - done.media.duration * 2) < 0.04);
-    assert.equal(slowJob.media.patch.stats.original_frames, 40);
     assert.equal((await fetch(`${url}/api/uploads?speed=99`, { method: 'POST', body: form })).status, 400);
-    assert.equal((await fetch(`${url}/api/uploads?speed=-2`, { method: 'POST', body: form })).status, 400);
     assert.equal((await fetch(`${url}/api/uploads?resolution=999`, { method: 'POST', body: form })).status, 400);
     const invalid = new FormData(); invalid.set('video', new Blob(['plain text']), 'bad.mp4');
     assert.equal((await fetch(`${url}/api/uploads`, { method: 'POST', body: invalid })).status, 400);
-    assert.equal((await fs.readdir(path.join(root, 'incoming'))).length, 2, 'failed upload cleaned up, valid uploads kept');
+    assert.equal((await fs.readdir(path.join(root, 'incoming'))).length, 1, 'failed upload cleaned up, original valid upload kept');
   } finally {
     child.kill(); await exited;
     await fs.rm(root, { recursive: true, force: true });

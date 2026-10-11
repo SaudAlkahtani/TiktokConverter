@@ -4,8 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { config } from '../src/config.js';
-import { run, probe, render as renderExport, buildRenderArgs } from '../src/ffmpeg.js';
-const render = (settings) => renderExport({ ...settings, options: { timestampScale: 1, ...settings.options } });
+import { run, probe, render } from '../src/ffmpeg.js';
 
 test('Khaled preparation and ghost-sample patch preserve real pictures and normal playback', async (t) => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'luna-export-test-'));
@@ -59,14 +58,6 @@ test('Khaled preparation and ghost-sample patch preserve real pictures and norma
         assert.equal(result.audio.codec, 'aac'); assert.equal(result.audio.channels, 2);
         assert.equal(result.patch.decodedAudioMatch, true);
       }
-      const slow = await renderExport({ input, output: path.join(folder, 'audio-slow.mp4') });
-      assert.equal(slow.timestampScale, 2, 'half speed is the default for this experiment');
-      assert.ok(Math.abs(slow.duration - 4) < 0.07);
-      assert.ok(Math.abs(slow.audio.duration - slow.duration) < 0.1);
-      assert.equal(slow.patch.decodedAudioMatch, true);
-      assert.equal(slow.patch.decodedPicturesMatch, true);
-      assert.equal(slow.patch.stats.original_frames, 240);
-      assert.equal(slow.patch.stats.declared_frames, 2400);
     });
     await t.test('1080p choice downsizes 3K without upscaling smaller clips', async () => {
       const input = await fixture('3k.mkv', '1728x3072');
@@ -82,10 +73,6 @@ test('Khaled preparation and ghost-sample patch preserve real pictures and norma
         assert.equal(result.targetFps, String(fps));
         assert.equal(result.patch.stats.original_frames, fps);
         assert.ok(Math.abs(result.duration - 1) < 0.02);
-        const slow = await render({ input, output: path.join(folder, `slow-${fps}.mp4`), options: { timestampScale: 2 } });
-        assert.equal(slow.targetFps, String(fps));
-        assert.equal(slow.patch.stats.original_frames, fps * 2);
-        assert.ok(Math.abs(slow.duration - 2) < 0.02);
       });
     }
     await t.test('normalizes variable-rate video and reduces 240fps by an integer factor', async () => {
@@ -98,17 +85,10 @@ test('Khaled preparation and ghost-sample patch preserve real pictures and norma
       await run(config.ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=240', '-frames:v', '240', '-c:v', 'libx264', '-y', high]);
       const reduced = await render({ input: high, output: path.join(folder, '240-patched.mp4') });
       assert.equal(reduced.targetFps, '120'); assert.equal(reduced.patch.stats.original_frames, 120);
-      const slowVariable = await render({ input: vfr, output: path.join(folder, 'vfr-slow.mp4'), options: { timestampScale: 2 } });
-      assert.ok(slowVariable.patch.validated);
-      assert.ok(Math.abs(slowVariable.duration - variable.source.duration * 2) < 0.07);
     });
     await t.test('rejects a non-video file', async () => {
       const input = path.join(folder, 'text.mp4'); await fs.writeFile(input, 'not a video');
       await assert.rejects(probe(input), /ffprobe failed/);
     });
   } finally { await fs.rm(folder, { recursive: true, force: true }); }
-});
-
-test('negative timestamp scale is rejected before encoding', () => {
-  assert.throws(() => buildRenderArgs({ width: 320, height: 240 }, 'in', 'out', { timestampScale: -2 }), /normal or half/);
 });

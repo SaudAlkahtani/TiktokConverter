@@ -18,7 +18,7 @@ export const config = {
   maxInputBytes: gigabytes * 1024 ** 3,
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
   python: process.env.PYTHON_PATH?.trim() || 'python',
-  inputTimestampScale: 2,
+  inputTimestampScale: 1,
   export: {
     videoCodec: "libx264",
     crf: 17,
