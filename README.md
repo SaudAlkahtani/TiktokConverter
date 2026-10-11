@@ -27,6 +27,15 @@ Open http://127.0.0.1:4173, choose a local video, select a resolution, then
 succeed. Progress shows measurement, encoding, and patch/validation stages.
 Jobs process one at a time in upload order.
 
+Playback now defaults to **Half speed (2× duration)** for comparison with the
+earlier timestamp-scale method. Choose **Normal speed** for Khaled's original
+timing. Half speed uses input `-itsscale 2`, keeps the measured output fps by
+duplicating frames, and uses `asetpts=N/SR/TB,atempo=0.5` to stretch audio while
+preserving pitch. A 10-second source becomes about 20 seconds. It is not optical
+flow interpolation and does not inherently improve compression quality. Use
+positive `2`; negative `-2` is rejected. The patch is applied after the slow-motion
+preparation and checked against that prepared video.
+
 For an existing checkout, use `git fetch origin` and switch to this branch before
 installing dependencies. Preserve your existing `.env`; there is no need to copy
 over it. Set `PYTHON_PATH=C:\Python314\python.exe` if Python is not on PATH
@@ -36,7 +45,7 @@ The existing startup command and desktop shortcut that launches it still work.
 
 Old `VIDEO_BITRATE`, `VIDEO_CODEC`, `VIDEO_CRF`, `VIDEO_GOP`, and
 `VIDEO_TIMESTAMP_SCALE` settings do not change this branch's fixed Khaled profile.
-That avoids an old 10 Mbps or half-speed setting changing the port unintentionally.
+Playback is selected per upload in the dashboard; legacy settings do not override it.
 
 ## What the method does
 
@@ -74,7 +83,7 @@ arbitrary source aspect ratios.
 | Video | HEVC, CPU slow CRF 18 | HEVC, CPU/AMD/NVIDIA presets | HEVC, 20 Mbps target default | H.264 slow CRF 17, bitrate ceilings |
 | Container | Standard MP4 | Standard MP4 | Standard MP4 | 10× declared samples via ghost entries |
 | Frame rate | Forced 60 | Forced 60 | Forced 60 | Measured source rate, up to 120 |
-| Playback | Normal or half speed | Normal or half speed | Global itsscale, default half | Normal speed |
+| Playback | Normal or half speed | Normal or half speed | Global itsscale, default half | Normal or half speed (default half) |
 | Resolution | Original | Original | No explicit resize | Short-edge ceiling or original, no upscale |
 | Sharpening | Gentle luma | Gentle luma | Stronger luma and chroma | None |
 | 10-bit / HDR | 10-bit preserved, HDR tone mapped | Precision retained with CPU fallback | 8-bit; Rec.709 tags only | 8-bit, HDR tone mapped |
@@ -114,6 +123,6 @@ No TikTok quality guarantee follows from these local checks.
 The original MIT notices are preserved in `vendor/khaled/LICENSE` and
 `vendor/khaled/tiktok_quality/LICENSE`. The transform, MP4 parser/builder and
 frame-rate/checker code are vendored from the pinned source.
-Local modifications: explicit FFmpeg executable paths in the checker; Windows
+Local modifications: optional timestamp-scaled half speed and matching audio; explicit FFmpeg executable paths in the checker; Windows
 hidden subprocess handling in the bridge; CPU HDR conversion and additional
 validation/size limits in the integration. Mac installers and Swift app are not run.

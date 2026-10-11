@@ -17,7 +17,7 @@ const render = (jobs) => {
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
     const fpsText = job.media?.targetFps?.includes('/') ? (Number(job.media.targetFps.split('/')[0]) / Number(job.media.targetFps.split('/')[1])).toFixed(2) : job.media?.targetFps;
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Verified · ${job.media.width}×${job.media.height} · ${bytes(job.media.bytes)} · H.264 · ${fpsText} real fps · normal speed · 10× declared samples` : `${job.progress || 0}% · ${job.stage || 'Waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Verified · ${job.media.width}×${job.media.height} · ${bytes(job.media.bytes)} · H.264 · ${fpsText} real fps · ${job.media.timestampScale === 2 ? 'half speed' : 'normal speed'} · ${job.media.duration.toFixed(1)}s · 10× declared samples` : `${job.progress || 0}% · ${job.stage || 'Waiting'}`;
     const warnings = node.querySelector('.warnings');
     if (job.media?.warnings?.length) { warnings.hidden = false; warnings.textContent = job.media.warnings.join(' '); }
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
@@ -33,7 +33,7 @@ form.addEventListener('submit', async (event) => {
   const button = form.querySelector('button');
   button.disabled = true; uploadStatus.textContent = `Uploading ${file.name}…`;
   try {
-    const settings = new URLSearchParams({ resolution: document.querySelector('#resolution').value });
+    const settings = new URLSearchParams({ resolution: document.querySelector('#resolution').value, speed: document.querySelector('#speed').value });
     const response = await fetch(`/api/uploads?${settings}`, { method: 'POST', body: new FormData(form) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Upload failed.');

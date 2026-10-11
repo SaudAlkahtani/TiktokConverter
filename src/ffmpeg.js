@@ -37,6 +37,9 @@ export async function probe(input) {
 }
 
 export function buildRenderArgs(media, input, output, options = {}) {
+  const timestampScale = Number(options.timestampScale ?? config.inputTimestampScale);
+  if (![1, 2].includes(timestampScale)) throw new Error('Choose normal or half-speed playback.');
+  if (timestampScale === 2 && !(media.duration > 0)) throw new Error('A readable video duration is required for half-speed playback.');
   const resolution = options.resolution ?? config.export.resolution;
   if (![0, 1080, 1440, 2160].includes(resolution)) throw new Error('Choose original, 1080p, 1440p, or 4K.');
   if (Math.min(media.width, media.height) < 16) throw new Error('H.264 requires dimensions of at least 16 pixels.');
@@ -55,6 +58,7 @@ export function buildRenderArgs(media, input, output, options = {}) {
   if (media.width % 2 || media.height % 2) warnings.push('Odd dimensions rounded down to even pixels for H.264 4:2:0.');
   if (/10|12|16|p010/.test(media.pixelFormat || '')) warnings.push('Khaled preparation produces 8-bit H.264, including from 10-bit sources.');
   if (rate.vfr) warnings.push(`Variable frame rate normalized to ${rate.targetFps} fps; frames can repeat or drop.`);
+  if (timestampScale === 2) warnings.push('Half speed doubles duration and duplicates frames to retain the output frame rate; it does not interpolate new motion.');
   const filters = ["setpts=PTS-STARTPTS"];
   if (hdr) {
     const transfer = media.colorTransfer === "smpte2084" ? "smpte2084" : "arib-std-b67";
@@ -70,8 +74,12 @@ export function buildRenderArgs(media, input, output, options = {}) {
     if (!known(media.colorTransfer)) warnings.push("Untagged footage assumed SDR Rec.709; apply the correct camera LUT to log footage before upload.");
   }
   if (width !== media.width || height !== media.height) filters.push(`scale=${width}:${height}:flags=lanczos`);
-  filters.push(rate.frameFilter, 'setsar=0', 'format=yuv420p');
-  const args = ["-hide_banner", "-y", "-i", input,
+  // Upstream's setpts=N/(fps)/TB conform filter would erase -itsscale.
+  // Half speed must use the rescaled input timeline, then sample it at target fps.
+  // Pad the final picture briefly and trim to the expected timeline so the last
+  // frame receives its full duration even when only packet PTS was rescaled.
+  filters.push(...(timestampScale === 2 ? [`fps=${rate.targetFps}`, `tpad=stop_mode=clone:stop_duration=${2 / fps}`] : [rate.frameFilter]), 'setsar=0', 'format=yuv420p');
+  const args = ["-hide_banner", "-y", '-itsscale', String(timestampScale), "-i", input,
     "-map", `0:${media.streamIndex}`, ...(media.audio ? ["-map", `0:${media.audio.index}`] : []),
     "-vf", filters.join(","), "-c:v", "libx264", "-preset", config.export.preset, '-profile:v', 'high',
     "-crf", String(config.export.crf), '-maxrate', `${maxrate}M`, '-bufsize', `${maxrate * 2}M`,
@@ -79,9 +87,10 @@ export function buildRenderArgs(media, input, output, options = {}) {
     "-r", rate.targetFps, "-fps_mode", "cfr",
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-map_metadata", "-1", "-map_chapters", "-1", "-tag:v", "avc1", "-movflags", "+write_colr", "-write_tmcd", "0"];
-  if (media.audio) args.push('-af', 'asetpts=PTS-STARTPTS', "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2");
+  if (media.audio) args.push('-af', timestampScale === 2 ? 'asetpts=N/SR/TB,atempo=0.5' : 'asetpts=PTS-STARTPTS', "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2");
+  if (timestampScale === 2) args.push('-t', String(media.duration * timestampScale));
   args.push("-progress", "pipe:1", "-nostats", output);
-  return { args, warnings, width, height, targetFps: rate.targetFps, maxrate, pixelFormat: 'yuv420p' };
+  return { args, warnings, width, height, targetFps: rate.targetFps, maxrate, timestampScale, pixelFormat: 'yuv420p' };
 }
 
 export async function runBridge(args) {
@@ -102,8 +111,8 @@ export async function render({ input, output, onProgress = () => {}, onStage = (
   const folder = await fs.mkdtemp(path.join(path.dirname(output), '.khaled-'));
   const prepared = path.join(folder, 'prep.mp4');
   const { args } = buildRenderArgs(source, input, prepared, { ...options, rate });
-  const { warnings, width, height, targetFps, maxrate } = settings;
-  const expectedDuration = source.duration;
+  const { warnings, width, height, targetFps, maxrate, timestampScale } = settings;
+  const expectedDuration = source.duration * timestampScale;
   let buffer = "";
   try {
     onStage('Preparing H.264 video');
@@ -119,15 +128,17 @@ export async function render({ input, output, onProgress = () => {}, onStage = (
     const numberRate = (value) => { const [n, d = 1] = value.split('/').map(Number); return n / d; };
     if (result.width !== width || result.height !== height || Math.abs(numberRate(result.fps) - numberRate(targetFps)) > 0.01 || result.codec !== 'h264') throw new Error('Prepared output failed dimension, codec, or frame-rate validation.');
     const targetNumber = Number(targetFps.split('/')[0]) / Number(targetFps.split('/')[1] || 1);
-    const expectedFrames = rate.frameFilter.startsWith('fps=') ? Math.round(source.duration * targetNumber)
+    const expectedFrames = timestampScale === 2 || rate.frameFilter.startsWith('fps=') ? Math.round(expectedDuration * targetNumber)
       : Math.ceil(rate.sourceFrames * targetNumber / numberRate(rate.sourceFps));
     if (Math.abs(result.frames - expectedFrames) > 2) throw new Error('Prepared video frame count differs unexpectedly from the source.');
-    if (Math.abs(result.duration - source.duration) > Math.max(0.05, 2 / targetNumber, source.duration * 0.002)) throw new Error('Prepared video duration differs unexpectedly from the source.');
+    if (Math.abs(result.duration - expectedDuration) > Math.max(0.05, 2 / targetNumber, expectedDuration * 0.002)) throw new Error('Prepared video duration differs unexpectedly from the selected playback speed.');
+    const expectedAudioDuration = timestampScale === 2 ? Math.min(source.audio?.duration * timestampScale, expectedDuration) : source.audio?.duration;
+    if (source.audio && (!result.audio || Math.abs(result.audio.duration - expectedAudioDuration) > Math.max(0.1, expectedDuration * 0.002))) throw new Error('Prepared audio duration differs unexpectedly from the selected playback speed.');
     onProgress(92); onStage('Patching MP4 and validating pictures, timing and audio');
     const patch = await runBridge(['patch', prepared, output, targetFps]);
     const stat = await fs.stat(output);
     warnings.push('Experimental MP4 ghost-sample patch: some players report misleading frame counts or decoding warnings. Upload results depend on TikTok.');
-    return { ...result, source, warnings, timestampScale: 1, targetFps, maxrate: `${maxrate}M`, patch, bytes: stat.size, output: path.basename(output) };
+    return { ...result, source, warnings, timestampScale, targetFps, maxrate: `${maxrate}M`, patch, bytes: stat.size, output: path.basename(output) };
   } catch (error) {
     await fs.rm(output, { force: true });
     throw error;

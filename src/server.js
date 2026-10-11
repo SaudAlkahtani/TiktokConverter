@@ -19,15 +19,17 @@ await app.register(multipart, { limits: { files: 1, fileSize: config.uploadLimit
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: 'Khaled method • H.264 + MP4 patch', codec: config.export.videoCodec, crf: config.export.crf, resolution: config.export.resolution, maxFps: 120, multiplier: 10, audioBitrate: '192k' } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: 'Khaled method • H.264 + MP4 patch', codec: config.export.videoCodec, crf: config.export.crf, resolution: config.export.resolution, timestampScale: config.inputTimestampScale, maxFps: 120, multiplier: 10, audioBitrate: '192k' } }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.post("/api/uploads", async (request, reply) => {
   let target;
   try {
     const resolution = Number(request.query.resolution ?? config.export.resolution);
     if (![0, 1080, 1440, 2160].includes(resolution)) return reply.code(400).send({ error: 'Choose original, 1080p, 1440p, or 4K.' });
-    if (request.query.speed !== undefined || request.query.sharpen !== undefined || request.query.encoder !== undefined) return reply.code(400).send({ error: 'This branch uses normal-speed Khaled encoding. Choose only an output resolution.' });
-    const options = { resolution };
+    const timestampScale = Number(request.query.speed ?? config.inputTimestampScale);
+    if (![1, 2].includes(timestampScale)) return reply.code(400).send({ error: 'Choose normal or half-speed playback.' });
+    if (request.query.sharpen !== undefined || request.query.encoder !== undefined) return reply.code(400).send({ error: 'This branch uses the Khaled encoding profile. Choose resolution and playback speed.' });
+    const options = { resolution, timestampScale };
     const file = await request.file();
     if (!file) return reply.code(400).send({ error: "Choose a video file first." });
 
