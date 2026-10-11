@@ -8,24 +8,26 @@ import fastifyStatic from "@fastify/static";
 import multipart from "@fastify/multipart";
 import { config } from "./config.js";
 import { JobQueue } from "./queue.js";
-import { probe } from "./ffmpeg.js";
+import { probe, validateTools } from "./ffmpeg.js";
 
 const app = Fastify({ logger: true });
 const queue = new JobQueue();
+await validateTools();
 await queue.prepare();
 await app.register(fastifyStatic, { root: path.join(config.root, "public"), prefix: "/" });
 await app.register(multipart, { limits: { files: 1, fileSize: config.uploadLimitBytes } });
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: "Original resolution • HEVC 60fps", codec: config.export.videoCodec, crf: config.export.crf, timestampScale: config.inputTimestampScale, gop: config.export.gop, audioBitrate: "256k" } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, profile: { name: 'Khaled method • H.264 + MP4 patch', codec: config.export.videoCodec, crf: config.export.crf, resolution: config.export.resolution, maxFps: 120, multiplier: 10, audioBitrate: '192k' } }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.post("/api/uploads", async (request, reply) => {
   let target;
   try {
-    const timestampScale = Number(request.query.speed ?? config.inputTimestampScale);
-    if (![1, 2].includes(timestampScale) || ![undefined, "true", "false"].includes(request.query.sharpen)) return reply.code(400).send({ error: "Choose normal or half speed and a valid detail setting." });
-    const options = { timestampScale, sharpen: request.query.sharpen !== "false" };
+    const resolution = Number(request.query.resolution ?? config.export.resolution);
+    if (![0, 1080, 1440, 2160].includes(resolution)) return reply.code(400).send({ error: 'Choose original, 1080p, 1440p, or 4K.' });
+    if (request.query.speed !== undefined || request.query.sharpen !== undefined || request.query.encoder !== undefined) return reply.code(400).send({ error: 'This branch uses normal-speed Khaled encoding. Choose only an output resolution.' });
+    const options = { resolution };
     const file = await request.file();
     if (!file) return reply.code(400).send({ error: "Choose a video file first." });
 

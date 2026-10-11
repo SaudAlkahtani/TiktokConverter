@@ -2,7 +2,7 @@
   "name": "local-video-converter",
   "version": "1.0.0",
   "private": true,
-  "description": "Local file-upload video converter with a 1080p60 export profile",
+  "description": "Windows local video uploader using Khaled H.264 preparation and MP4 container patching",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",

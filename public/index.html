@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Local Video Converter</title>
+    <title>Khaled Method · Windows Converter</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
@@ -11,7 +11,7 @@
       <section class="hero">
         <p class="eyebrow">LOCAL VIDEO WORKER</p>
         <h1>Local <span>→</span> Export</h1>
-        <p class="lede">Keep every pixel of your original. Export 1080p, 2K, 3K, 4K and other source sizes as a detailed 60fps HEVC MP4, with quality that adapts to the footage.</p>
+        <p class="lede">Prepare your video with Khaled’s method on Windows: high-quality H.264 followed by the MP4 container patch. Keep normal playback and your source frame rate up to 120fps.</p>
         <div class="profile" id="profile">Checking worker…</div>
       </section>
       <section class="guide">
@@ -26,10 +26,10 @@
           <button type="submit">Upload &amp; convert</button>
         </form>
         <div class="export-options">
-          <label>Playback <select id="speed"><option value="1">Normal speed</option><option value="2">Half speed (2× duration)</option></select></label>
-          <label><input type="checkbox" id="sharpen" checked /> Gentle detail enhancement</label>
+          <label>Output size <select id="resolution"><option value="1080">1080p</option><option value="1440">1440p / 2K</option><option value="2160">2160p / 4K</option><option value="0">Original dimensions</option></select></label>
         </div>
-        <p class="upload-status">Original dimensions preserved. HDR is converted to SDR; audio follows playback speed. 60fps uses frame duplication, not AI interpolation.</p>
+        <p class="upload-status">Resolution sets the shorter edge. Smaller sources are never enlarged. HDR becomes SDR; odd dimensions round down by one pixel.</p>
+        <p class="upload-status">Experimental upload method. The MP4 declares ghost samples; these do not create motion frames. Some players report unusual metadata or decoding warnings.</p>
         <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server.</p>
       </section>
       <section class="jobs-section">

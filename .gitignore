@@ -1,6 +1,8 @@
 node_modules/
 .npm-cache/
 tools/
+__pycache__/
+*.pyc
 .env
 data/
 incoming/
