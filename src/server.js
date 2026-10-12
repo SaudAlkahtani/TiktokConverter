@@ -9,16 +9,26 @@ import multipart from "@fastify/multipart";
 import { config } from "./config.js";
 import { JobQueue } from "./queue.js";
 import { probe } from "./ffmpeg.js";
+import { startTelegram, redactTelegramError } from "./telegram.js";
+import { TikTokBrowser } from './tiktok-browser.js';
+import { TikTokDrafts } from './tiktok-drafts.js';
 
 const app = Fastify({ logger: true });
 const queue = new JobQueue();
+const telegramState = { configured: Boolean(config.token), status: config.token ? "starting" : "disabled" };
+let telegram;
+const tiktokBrowser=new TikTokBrowser();
+const tiktokDrafts=await new TikTokDrafts(tiktokBrowser).load();
 await queue.prepare();
 await app.register(fastifyStatic, { root: path.join(config.root, "public"), prefix: "/" });
 await app.register(multipart, { limits: { files: config.maxUploadFiles, fileSize: config.uploadLimitBytes } });
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "HEVC 60fps", codec: config.export.videoCodec, bitrate: config.export.bitrate, gop: config.export.gop, audioBitrate: "256k" } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, telegram: telegramState, tiktok: {account:config.tiktok.handle || null,publishingConfigured:Boolean(config.tiktok.handle && config.tiktok.ownerIds.size),browserOpen:Boolean(tiktokBrowser.context)}, profile: { name: `HEVC 60fps • ${config.inputTimestampScale === 2 ? 'half speed' : 'normal speed'}`, timestampScale:config.inputTimestampScale,codec: config.export.videoCodec, bitrate: config.export.bitrate, gop: config.export.gop, audioBitrate: config.export.audioBitrate } }));
+const localTikTokRequest=(request)=>request.headers['x-converter-local']==='1' && request.headers.origin===`http://127.0.0.1:${config.port}`;
+app.post('/api/tiktok/connect',async(request,reply)=>{if(!localTikTokRequest(request))return reply.code(403).send({error:'Use the local dashboard.'});try{return await tiktokBrowser.connect();}catch(error){return reply.code(400).send({error:error.message});}});
+app.post('/api/tiktok/inspect',async(request,reply)=>{if(!localTikTokRequest(request))return reply.code(403).send({error:'Use the local dashboard.'});try{return {controls:await tiktokBrowser.inventory()};}catch(error){return reply.code(400).send({error:error.message});}});
 app.get("/api/jobs", async () => queue.snapshot());
 app.delete("/api/jobs/active", async () => queue.clearActive());
 app.delete("/api/jobs/completed", async () => queue.clearCompleted());
@@ -70,5 +80,11 @@ app.get("/api/events", (request, reply) => {
   send(queue.snapshot()); queue.on("update", send); request.raw.on("close", () => queue.off("update", send));
 });
 
+app.addHook("onClose", async () => { await telegram?.stop(); await tiktokBrowser.close(); });
 await app.listen({ port: config.port, host: "127.0.0.1" });
 console.log(`Dashboard: http://127.0.0.1:${config.port}`);
+startTelegram(queue, { state: telegramState, tiktokDrafts }).then((worker) => { telegram = worker; }).catch((error) => {
+  telegramState.status = "failed"; telegramState.error = redactTelegramError(error);
+  console.error("Telegram not ready:", telegramState.error);
+});
+for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, async () => { queue.clearActive(); await app.close(); });

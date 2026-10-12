@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="/mnt/c/Users/BigBoi/OneDrive/Documents/ChatGPT/Tiktok High quality upload"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SECRETS_FILE="$PROJECT_ROOT/local-bot-api/secrets.env"
 SERVER_BIN="$HOME/telegram-bot-api/build/telegram-bot-api"
 # TDLib's per-bot database uses POSIX-only filenames and atomic operations.
@@ -23,4 +23,6 @@ set -a
 source "$SECRETS_FILE"
 set +a
 mkdir -p "$STATE_DIR" "$STATE_DIR/tmp"
-exec "$SERVER_BIN" --api-id="$TELEGRAM_API_ID" --api-hash="$TELEGRAM_API_HASH" --local --http-port=8081 --dir="$STATE_DIR" --temp-dir="$STATE_DIR/tmp" >> "$LOG_FILE" 2>&1
+# The official binary reads API credentials from the environment. Do not put
+# them in process arguments; keep HTTP access private to this machine.
+exec "$SERVER_BIN" --local --http-ip-address=127.0.0.1 --http-port=8081 --dir="$STATE_DIR" --temp-dir="$STATE_DIR/tmp" >> "$LOG_FILE" 2>&1

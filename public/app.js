@@ -14,16 +14,17 @@ const render = (jobs) => {
   for (const job of jobs) {
     const node = template.content.cloneNode(true); const el = node.querySelector('.job');
     node.querySelector('h3').textContent = job.sourceName;
-    node.querySelector('.metadata').textContent = `${bytes(job.bytes)} · queued ${new Date(job.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+    node.querySelector('.metadata').textContent = `${bytes(job.bytes)} · ${job.origin || 'local'} · queued ${new Date(job.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · HEVC · 60fps` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.media?.width}×${job.media?.height} · HEVC · 60fps · ${job.media?.bitrate}${job.telegramStatus ? ` · Telegram ${job.telegramStatus}` : ''}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
+const updateHealth = () => fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch  |  Telegram: ${health.telegram?.status || 'disabled'}${health.telegram?.username ? ` @${health.telegram.username}` : ''}`; }).catch(() => {});
+updateHealth(); setInterval(updateHealth, 10000);
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;
@@ -65,4 +66,11 @@ const clearJobs = async (kind, button) => {
 clearActiveButton.addEventListener('click', () => clearJobs('active', clearActiveButton));
 clearCompletedButton.addEventListener('click', () => clearJobs('completed', clearCompletedButton));
 const stream = new EventSource('/api/events'); stream.onmessage = ({data}) => render(JSON.parse(data));
+for(const action of ['connect','inspect'])document.querySelector(`#tiktok-${action}`).addEventListener('click',async()=>{
+  const status=document.querySelector('#tiktok-status');status.textContent='Opening/checking the local TikTok browser…';
+  try{const response=await fetch(`/api/tiktok/${action}`,{method:'POST',headers:{'X-Converter-Local':'1'}});const result=await response.json();if(!response.ok)throw new Error(result.error);
+    status.textContent=result.message || 'Visible controls captured. Calibrate the adapter before enabling posting.';
+    if(result.controls){const output=document.querySelector('#tiktok-controls');output.hidden=false;output.textContent=JSON.stringify(result.controls,null,2);}
+  }catch(error){status.textContent=error.message;}
+});
 stream.onerror = () => { profile.textContent = 'Worker disconnected — make sure npm start is running.'; };

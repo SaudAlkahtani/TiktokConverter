@@ -1,2 +1,3 @@
 @echo off
-wsl.exe -d Ubuntu-24.04 -- bash "/mnt/c/Users/BigBoi/OneDrive/Documents/ChatGPT/Tiktok High quality upload/local-bot-api/start-server.sh"
+for /f "delims=" %%P in ('wsl.exe -d Ubuntu-24.04 -- wslpath -u "%~dp0..\local-bot-api\start-server.sh"') do set "CONVERTER_API_SCRIPT=%%P"
+wsl.exe -d Ubuntu-24.04 -- bash "%CONVERTER_API_SCRIPT%"

@@ -11,7 +11,7 @@
       <section class="hero">
         <p class="eyebrow">LOCAL VIDEO WORKER</p>
         <h1>Local <span>→</span> Export</h1>
-        <p class="lede">Choose a video from this computer. The local worker makes a 60fps HEVC MP4 with the reference settings, then gives you a direct download when it is finished.</p>
+        <p class="lede">Upload videos here or send them to your dedicated Telegram bot. Both use original dimensions, 60fps HEVC, half-speed playback with matched audio, and Khaled’s bitrate limits.</p>
         <div class="profile" id="profile">Checking worker…</div>
       </section>
       <section class="guide">
@@ -28,11 +28,14 @@
         <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server.</p>
       </section>
       <section class="jobs-section">
+        <p><button id="tiktok-connect" class="queue-button" type="button">Connect TikTok (manual login)</button> <button id="tiktok-inspect" class="queue-button" type="button">Inspect Studio controls</button></p>
+        <p id="tiktok-status" aria-live="polite">TikTok publishing requires your exact account handle, authorized Telegram user ID, and verified Studio controls. No automatic posting without review.</p>
+        <pre id="tiktok-controls" hidden></pre>
         <div class="section-heading"><div><p class="eyebrow">PROCESSING QUEUE</p><h2>Exports</h2></div><div class="queue-tools"><button id="clear-active" class="queue-button" type="button">Clear active</button><button id="clear-completed" class="queue-button" type="button">Clear completed</button><span class="live"><i></i> LIVE</span></div></div>
         <div id="empty" class="empty">No clips yet. Choose a video above to begin.</div>
         <div id="jobs" class="jobs"></div>
       </section>
-      <aside class="note"><strong>Local-only:</strong> uploads, source files, and exports stay in this project’s local media folders. Nothing is sent to a Telegram bot.</aside>
+      <aside class="note"><strong>On-device processing:</strong> browser uploads stay local. Telegram uploads are downloaded, converted here, and returned to the originating chat as a File. Their downloaded originals are deleted only after successful delivery; outputs are kept.</aside>
     </main>
     <template id="job-template">
       <article class="job">

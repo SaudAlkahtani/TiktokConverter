@@ -19,11 +19,27 @@ export const config = {
   maxInputBytes: gigabytes * 1024 ** 3,
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
   maxUploadFiles: uploadFiles,
-  inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 2)),
+  inputTimestampScale: Number(process.env.VIDEO_TIMESTAMP_SCALE || 2),
+  tiktok: {
+    accountName: 'Saud fitness journey',
+    handle: (process.env.TIKTOK_HANDLE || 'sauds.journey').replace(/^@/, '').trim(),
+    ownerIds: new Set((process.env.TIKTOK_ALLOWED_USER_IDS || '').split(',').map((id) => id.trim()).filter(Boolean)),
+    timezone: process.env.TIKTOK_TIMEZONE || 'Asia/Riyadh',
+    browserChannel: process.env.TIKTOK_BROWSER_CHANNEL || 'msedge',
+    profilePath: path.join(root, '.tiktok-browser'),
+    settingsPath: process.env.TIKTOK_DATA_ROOT || path.join(root, 'data', 'tiktok')
+  },
+  token: process.env.TELEGRAM_BOT_TOKEN?.trim() || "",
+  botUsername: process.env.TELEGRAM_BOT_USERNAME?.trim() || "",
+  telegramApiRoot: process.env.TELEGRAM_API_ROOT?.trim() || "https://api.telegram.org",
+  wslDistribution: process.env.WSL_DISTRIBUTION?.trim() || "Ubuntu-24.04",
+  allowedChatIds: new Set((process.env.TELEGRAM_ALLOWED_CHAT_IDS || "").split(",").map((id) => id.trim()).filter(Boolean)),
+  cleanupSourceAfterSend: process.env.DELETE_SOURCE_AFTER_SEND !== "false",
   export: {
     videoCodec: process.env.VIDEO_CODEC || "libx265",
-    // Every export is constant 60 fps, so use the higher 20 Mbps target.
-    bitrate: process.env.VIDEO_BITRATE || "20M",
+    // Copy only Khaled's resolution-dependent rate limits, not its codec/patch.
+    bitrate: "18M / 28M / 45M by resolution",
+    audioBitrate: "192k",
     gop: Math.max(1, Number(process.env.VIDEO_GOP || 60)),
     sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
   },
@@ -34,3 +50,11 @@ export const config = {
   },
   mediaRoot
 };
+
+export const isLocalBotApi = new URL(config.telegramApiRoot).hostname !== "api.telegram.org";
+
+export function bitrateFor(media) {
+  const shortEdge = Math.min(media.width, media.height);
+  const mbps = shortEdge <= 1080 ? 18 : shortEdge <= 1440 ? 28 : 45;
+  return { bitrate: `${mbps}M`, maxrate: `${mbps}M`, bufsize: `${mbps * 2}M` };
+}

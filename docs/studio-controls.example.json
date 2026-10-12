@@ -1,0 +1,17 @@
+{
+  "note": "Calibration template only. Empty selectors block posting. Use inspected signed-in controls, not guesses.",
+  "accountSelector": "",
+  "fileInputSelector": "",
+  "captionSelector": "",
+  "captionKind": "contenteditable",
+  "postSelector": "",
+  "scheduleSubmitSelector": "",
+  "successSelector": "",
+  "scheduledSuccessSelector": "",
+  "fields": {
+    "comments": { "label": "Allow comments (verify actual label)", "selector": "", "kind": "checkbox" },
+    "schedule": { "label": "Schedule (verify actual control)", "selector": "", "kind": "switch" },
+    "scheduleDate": { "label": "Schedule date", "selector": "", "kind": "date" },
+    "scheduleTime": { "label": "Schedule time", "selector": "", "kind": "time" }
+  }
+}

@@ -9,8 +9,8 @@ export class JobQueue extends EventEmitter {
   constructor() { super(); this.jobs = []; this.running = false; this.activeJobId = null; this.activeAbortController = null; }
   snapshot() { return this.jobs.map(({ sourcePath, outputPath, ...job }) => ({ ...job, downloadable: Boolean(outputPath) })); }
   emitUpdate() { this.emit("update", this.snapshot()); }
-  add({ sourcePath, sourceName, bytes }) {
-    const job = { id: randomUUID(), sourcePath, sourceName, bytes, status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
+  add({ sourcePath, sourceName, bytes, chatId, messageId, userId, method = 'return' }) {
+    const job = { id: randomUUID(), sourcePath, sourceName, bytes, chatId, messageId, userId, method, origin: chatId == null ? "local" : "telegram", status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
     // Append so the oldest waiting upload always starts next (FIFO).
     this.jobs.push(job); this.emitUpdate(); this.pump(); return job;
   }

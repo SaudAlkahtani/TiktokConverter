@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { config } from "./config.js";
+import { config, bitrateFor } from "./config.js";
 
 const run = async (command, args) => {
   const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -13,7 +13,7 @@ const run = async (command, args) => {
 };
 
 export async function probe(input) {
-  const child = spawn(config.ffprobe, ["-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate", "-of", "json", input], { windowsHide: true });
+  const child = spawn(config.ffprobe, ["-v", "error", "-show_streams", "-show_format", "-of", "json", input], { windowsHide: true });
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -21,9 +21,15 @@ export async function probe(input) {
   const [code] = await once(child, "close");
   if (code !== 0) throw new Error(`ffprobe failed: ${stderr}`);
   const info = JSON.parse(stdout);
-  const video = info.streams.find((stream) => stream.codec_type === "video") || {};
+  const video = info.streams.find((stream) => stream.codec_type === "video" && !stream.disposition?.attached_pic) || {};
   if (!video.width || !video.height) throw new Error("No readable video stream was found in this file.");
-  return { duration: Number(info.format?.duration || 0), width: video.width, height: video.height, fps: video.r_frame_rate };
+  const rotation = Number(video.side_data_list?.find((item) => item.rotation !== undefined)?.rotation || video.tags?.rotate || 0);
+  const swapped = Math.abs(rotation % 180) === 90;
+  const audio = info.streams.find((stream) => stream.codec_type === "audio");
+  return { duration: Number(video.duration || info.format?.duration || 0),
+    width: swapped ? video.height : video.width, height: swapped ? video.width : video.height,
+    fps: video.avg_frame_rate !== "0/0" ? video.avg_frame_rate : video.r_frame_rate,
+    codec: video.codec_name, audio: audio ? { codec: audio.codec_name, channels: audio.channels, duration: Number(audio.duration || info.format?.duration || 0) } : null };
 }
 
 export class RenderCancelledError extends Error {
@@ -37,27 +43,35 @@ const throwIfAborted = (signal) => {
   if (signal?.aborted) throw new RenderCancelledError();
 };
 
-export async function render({ input, output, onProgress, signal }) {
-  throwIfAborted(signal);
-  const media = await probe(input);
-  throwIfAborted(signal);
-  // -itsscale changes the output timeline. Progress arrives in output time, so
-  // compare it with the scaled duration rather than the source duration.
-  const expectedDuration = media.duration * config.inputTimestampScale;
+export function buildRenderArgs(media, input, output) {
+  if (![1, 2].includes(config.inputTimestampScale)) throw new Error('VIDEO_TIMESTAMP_SCALE must be 1 or 2.');
   const filters = [
+    'setpts=PTS-STARTPTS',
     "fps=60",
+    ...(config.inputTimestampScale === 2 ? ['tpad=stop_mode=clone:stop_duration=0.034'] : []),
     config.export.sharpen
   ].filter(Boolean).join(",");
-  const args = [
+  const rates = bitrateFor(media);
+  return [
     "-hide_banner", "-y", "-itsscale", String(config.inputTimestampScale), "-i", input,
     "-map", "0:v:0", "-map", "0:a?",
     "-vf", filters,
-    "-c:v", config.export.videoCodec, "-b:v", config.export.bitrate, "-g", String(config.export.gop),
+    "-c:v", config.export.videoCodec, "-b:v", rates.bitrate, "-maxrate", rates.maxrate, "-bufsize", rates.bufsize, "-g", String(config.export.gop),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
     "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0", "-pix_fmt", "yuv420p",
-    "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2",
+    '-af', `asetpts=N/SR/TB,atempo=${1 / config.inputTimestampScale}`,
+    "-c:a", "aac", "-b:a", config.export.audioBitrate, "-ar", "48000", "-ac", "2",
+    '-t', String(media.duration * config.inputTimestampScale),
     "-progress", "pipe:1", "-nostats", output
   ];
+}
+
+export async function render({ input, output, onProgress = () => {}, signal }) {
+  throwIfAborted(signal);
+  const media = await probe(input);
+  throwIfAborted(signal);
+  const expectedDuration = media.duration * config.inputTimestampScale;
+  const args = buildRenderArgs(media, input, output);
   const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const stop = () => child.kill();
   signal?.addEventListener("abort", stop, { once: true });
@@ -77,8 +91,13 @@ export async function render({ input, output, onProgress, signal }) {
     const [code] = await once(child, "close");
     throwIfAborted(signal);
     if (code !== 0) throw new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-1800)}`);
+    const result = await probe(output);
+    const [fpsN, fpsD = 1] = result.fps.split("/").map(Number);
+    if (result.width !== media.width || result.height !== media.height || Math.abs(fpsN / fpsD - 60) > 0.01 || Math.abs(result.duration - expectedDuration) > Math.max(0.1, expectedDuration * 0.005)) {
+      throw new Error("Output did not retain the source dimensions, expected duration, or 60fps.");
+    }
     const stat = await fs.stat(output);
-    return { ...media, bytes: stat.size, output: path.basename(output) };
+    return { ...result, timestampScale: config.inputTimestampScale, source: media, ...bitrateFor(media), bytes: stat.size, output: path.basename(output) };
   } catch (error) {
     await fs.rm(output, { force: true });
     throw error;

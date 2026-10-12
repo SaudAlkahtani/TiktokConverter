@@ -2,6 +2,9 @@ node_modules/
 .npm-cache/
 tools/
 .env
+.tiktok-browser/
+playwright-report/
+test-results/
 data/
 incoming/
 output/
