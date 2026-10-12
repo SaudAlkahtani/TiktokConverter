@@ -12,7 +12,11 @@ The profile now matches the supplied FFmpeg reference:
 - `-itsscale 2`, making half-speed output; set `VIDEO_TIMESTAMP_SCALE=1` for
   normal-speed delivery
 - `fps=60,unsharp=3:3:0.4:3:3:0.4`; no resizing or cropping is applied
-- HEVC/H.265 at 10 Mbps with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
+- HEVC/H.265 with resolution-based target/max bitrate: 18 Mbps up to 1080p,
+  28 Mbps up to 1440p, and 45 Mbps above 1440p (using the shorter edge).
+  The buffer is twice that rate. Legacy `VIDEO_BITRATE` overrides are ignored.
+  This copies only Khaled's rate limits; audio and timestamp handling are
+  unchanged from `27f2768`. A 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
   `hvc1` tagging, fast-start metadata, and no embedded timecode track
 - AAC stereo audio at 256 kbps
 

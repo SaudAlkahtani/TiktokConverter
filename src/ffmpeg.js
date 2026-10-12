@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { config } from "./config.js";
+import { config, bitrateFor } from "./config.js";
 
 const run = async (command, args) => {
   const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -44,6 +44,7 @@ export async function render({ input, output, onProgress, signal }) {
   // -itsscale changes the output timeline. Progress arrives in output time, so
   // compare it with the scaled duration rather than the source duration.
   const expectedDuration = media.duration * config.inputTimestampScale;
+  const rates = bitrateFor(media);
   const filters = [
     "fps=60",
     config.export.sharpen
@@ -52,7 +53,8 @@ export async function render({ input, output, onProgress, signal }) {
     "-hide_banner", "-y", "-itsscale", String(config.inputTimestampScale), "-i", input,
     "-map", "0:v:0", "-map", "0:a?",
     "-vf", filters,
-    "-c:v", config.export.videoCodec, "-b:v", config.export.bitrate, "-g", String(config.export.gop),
+    "-c:v", config.export.videoCodec, "-b:v", rates.bitrate,
+    "-maxrate", rates.maxrate, "-bufsize", rates.bufsize, "-g", String(config.export.gop),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
     "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2",

@@ -22,8 +22,8 @@ export const config = {
   inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 2)),
   export: {
     videoCodec: process.env.VIDEO_CODEC || "libx265",
-    // Every export is constant 60 fps, so use the higher 20 Mbps target.
-    bitrate: process.env.VIDEO_BITRATE || "20M",
+    // Resolution-based rate limits only; keep the original codec/audio/timing.
+    bitrate: "18M / 28M / 45M by resolution",
     gop: Math.max(1, Number(process.env.VIDEO_GOP || 60)),
     sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
   },
@@ -34,3 +34,9 @@ export const config = {
   },
   mediaRoot
 };
+
+export function bitrateFor(media) {
+  const shortEdge = Math.min(media.width, media.height);
+  const mbps = shortEdge <= 1080 ? 18 : shortEdge <= 1440 ? 28 : 45;
+  return { bitrate: `${mbps}M`, maxrate: `${mbps}M`, bufsize: `${mbps * 2}M` };
+}
