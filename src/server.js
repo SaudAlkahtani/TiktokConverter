@@ -16,13 +16,18 @@ await queue.prepare();
 await app.register(fastifyStatic, { root: path.join(config.root, "public"), prefix: "/" });
 await app.register(multipart, { limits: { files: config.maxUploadFiles, fileSize: config.uploadLimitBytes } });
 
+app.get('/instagram', async (request, reply) => reply.sendFile('instagram.html'));
+app.get('/tiktok', async (request, reply) => reply.sendFile('index.html'));
+
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
 app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "HEVC 60fps", codec: config.export.videoCodec, bitrate: config.export.bitrate, gop: config.export.gop, audioBitrate: "256k" } }));
 app.get("/api/jobs", async () => queue.snapshot());
-app.delete("/api/jobs/active", async () => queue.clearActive());
-app.delete("/api/jobs/completed", async () => queue.clearCompleted());
+app.delete("/api/jobs/active", async (request) => queue.clearActive(request.query.platform));
+app.delete("/api/jobs/completed", async (request) => queue.clearCompleted(request.query.platform));
 app.post("/api/uploads", async (request, reply) => {
+  const platform = request.query.platform || 'tiktok';
+  if (!['tiktok', 'instagram'].includes(platform)) return reply.code(400).send({ error: 'Choose TikTok or Instagram.' });
   const accepted = [];
   const rejected = [];
   try {
@@ -37,7 +42,7 @@ app.post("/api/uploads", async (request, reply) => {
 
         const stat = await fs.stat(target);
         const source = await probe(target);
-        const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size });
+        const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size, platform });
         accepted.push({ id: job.id, sourceName, bytes: stat.size, source });
       } catch (error) {
         if (target) await fs.rm(target, { force: true });

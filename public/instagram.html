@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Instagram Converter</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="converter-theme">
+    <main><nav class="platform-nav" aria-label="Converter"><a href="/tiktok">TikTok converter</a><a href="/instagram" aria-current="page">Instagram converter</a></nav>
+      <section class="hero">
+        <p class="eyebrow">LOCAL VIDEO WORKER</p>
+        <h1>Instagram <span>→</span> Export</h1>
+        <p class="lede">Make your next Reel. Export a crisp 1080 × 1920 H.264 MP4 at 30 fps, with AAC stereo audio and normal playback. Your full picture is preserved with padding.</p>
+        <div class="profile" id="profile">Checking worker…</div>
+      </section>
+      <section class="guide">
+        <div><b>01</b><span>Choose a <strong>local video</strong></span></div>
+        <div><b>02</b><span>Upload it to this worker</span></div>
+        <div><b>03</b><span>Download the finished MP4</span></div>
+      </section>
+      <section class="upload-card">
+        <p class="eyebrow">READY FOR YOUR NEXT REEL</p>
+        <form id="upload-form">
+          <label class="file-picker"><input id="video-file" name="video" type="file" accept="video/*,.mov,.mkv,.avi,.webm,.m4v" multiple required /><span id="file-label">Choose videos</span></label>
+          <button type="submit">Upload &amp; convert</button>
+        </form>
+        <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server. Instagram recompresses uploads. Enable Upload at highest quality in Instagram.</p>
+      </section>
+      <section class="jobs-section">
+        <div class="section-heading"><div><p class="eyebrow">PROCESSING QUEUE</p><h2>Exports</h2></div><div class="queue-tools"><button id="clear-active" class="queue-button" type="button">Clear active</button><button id="clear-completed" class="queue-button" type="button">Clear completed</button><span class="live"><i></i> LIVE</span></div></div>
+        <div id="empty" class="empty">No clips yet. Choose a video above to begin.</div>
+        <div id="jobs" class="jobs"></div>
+      </section>
+      <aside class="note"><strong>Local-only:</strong> uploads, source files, and exports stay in this project’s local media folders. Nothing is sent to a Telegram bot.</aside>
+    </main>
+    <template id="job-template">
+      <article class="job">
+        <div class="job-top"><div class="clip"><div class="clip-icon">▶</div><div><h3></h3><p class="metadata"></p></div></div><span class="status"></span></div>
+        <div class="bar"><span></span></div>
+        <div class="job-bottom"><span class="detail"></span><a class="download" hidden>Download export</a></div>
+      </article>
+    </template>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

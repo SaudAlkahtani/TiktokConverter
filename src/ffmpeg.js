@@ -13,7 +13,7 @@ const run = async (command, args) => {
 };
 
 export async function probe(input) {
-  const child = spawn(config.ffprobe, ["-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate", "-of", "json", input], { windowsHide: true });
+  const child = spawn(config.ffprobe, ["-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate,sample_aspect_ratio,display_aspect_ratio,color_transfer,color_primaries,color_space", "-of", "json", input], { windowsHide: true });
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -23,7 +23,7 @@ export async function probe(input) {
   const info = JSON.parse(stdout);
   const video = info.streams.find((stream) => stream.codec_type === "video") || {};
   if (!video.width || !video.height) throw new Error("No readable video stream was found in this file.");
-  return { duration: Number(info.format?.duration || 0), width: video.width, height: video.height, fps: video.r_frame_rate };
+  return { duration: Number(info.format?.duration || 0), width: video.width, height: video.height, fps: video.r_frame_rate, sampleAspectRatio: video.sample_aspect_ratio, displayAspectRatio: video.display_aspect_ratio, colorTransfer: video.color_transfer, colorPrimaries: video.color_primaries, colorSpace: video.color_space };
 }
 
 export class RenderCancelledError extends Error {
@@ -37,18 +37,19 @@ const throwIfAborted = (signal) => {
   if (signal?.aborted) throw new RenderCancelledError();
 };
 
-export async function render({ input, output, onProgress, signal }) {
+export async function render({ input, output, onProgress = () => {}, signal, platform = "tiktok" }) {
   throwIfAborted(signal);
   const media = await probe(input);
   throwIfAborted(signal);
   // -itsscale changes the output timeline. Progress arrives in output time, so
   // compare it with the scaled duration rather than the source duration.
-  const expectedDuration = media.duration * config.inputTimestampScale;
+  const instagram = platform === "instagram";
+  const expectedDuration = media.duration * (instagram ? 1 : config.inputTimestampScale);
   const filters = [
     "fps=60",
     config.export.sharpen
   ].filter(Boolean).join(",");
-  const args = [
+  const args = instagram ? buildInstagramArgs(input, output, media) : [
     "-hide_banner", "-y", "-itsscale", String(config.inputTimestampScale), "-i", input,
     "-map", "0:v:0", "-map", "0:a?",
     "-vf", filters,
@@ -78,7 +79,9 @@ export async function render({ input, output, onProgress, signal }) {
     throwIfAborted(signal);
     if (code !== 0) throw new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-1800)}`);
     const stat = await fs.stat(output);
-    return { ...media, bytes: stat.size, output: path.basename(output) };
+    const result = await probe(output);
+    if (instagram && (result.width !== 1080 || result.height !== 1920 || result.sampleAspectRatio !== '1:1' || result.displayAspectRatio !== '9:16' || result.fps !== '30/1' || Math.abs(result.duration - media.duration) > 0.2)) throw new Error('Instagram export failed dimensions, frame rate or duration validation.');
+    return { ...result, platform, bytes: stat.size, output: path.basename(output) };
   } catch (error) {
     await fs.rm(output, { force: true });
     throw error;
@@ -90,4 +93,18 @@ export async function render({ input, output, onProgress, signal }) {
 export async function validateTools() {
   await run(config.ffmpeg, ["-version"]);
   await run(config.ffprobe, ["-version"]);
+}
+
+// Practical Reels preset; pad rather than crop the source picture.
+export function buildInstagramArgs(input, output, media = {}) {
+  const hdr = ["smpte2084", "arib-std-b67"].includes(media.colorTransfer);
+  const colorFilter = hdr ? `zscale=pin=${media.colorPrimaries || "bt2020"}:tin=${media.colorTransfer}:min=${media.colorSpace || "bt2020nc"}:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=mobius:desat=2,zscale=t=bt709:m=bt709:r=limited,` : "";
+  return ['-hide_banner', '-y', '-i', input, '-map', '0:v:0', '-map', '0:a:0?',
+    '-vf', colorFilter + 'scale=trunc(iw*sar/2)*2:ih,setsar=1,scale=1080:1920:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-maxrate', '12M', '-bufsize', '24M',
+    '-profile:v', 'high', '-level:v', '4.1', '-g', '60', '-keyint_min', '60', '-sc_threshold', '0', '-flags', '+cgop',
+    '-r', '30', '-fps_mode', 'cfr', '-pix_fmt', 'yuv420p', '-tag:v', 'avc1',
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
+    '-map_metadata', '-1', '-map_chapters', '-1', '-movflags', '+faststart', '-use_editlist', '0',
+    '-progress', 'pipe:1', '-nostats', output];
 }

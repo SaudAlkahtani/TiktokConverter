@@ -9,24 +9,24 @@ export class JobQueue extends EventEmitter {
   constructor() { super(); this.jobs = []; this.running = false; this.activeJobId = null; this.activeAbortController = null; }
   snapshot() { return this.jobs.map(({ sourcePath, outputPath, ...job }) => ({ ...job, downloadable: Boolean(outputPath) })); }
   emitUpdate() { this.emit("update", this.snapshot()); }
-  add({ sourcePath, sourceName, bytes }) {
-    const job = { id: randomUUID(), sourcePath, sourceName, bytes, status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
+  add({ sourcePath, sourceName, bytes, platform = "tiktok" }) {
+    const job = { id: randomUUID(), sourcePath, sourceName, bytes, platform, status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
     // Append so the oldest waiting upload always starts next (FIFO).
     this.jobs.push(job); this.emitUpdate(); this.pump(); return job;
   }
   get(id) { return this.jobs.find((job) => job.id === id); }
-  clearActive() {
-    const active = this.jobs.filter((job) => job.status === "queued" || job.status === "processing");
+  clearActive(platform) {
+    const active = this.jobs.filter((job) => (!platform || job.platform === platform) && (job.status === "queued" || job.status === "processing"));
     const processing = active.some((job) => job.status === "processing");
     for (const job of active) job.cancelled = true;
-    this.jobs = this.jobs.filter((job) => job.status !== "queued" && job.status !== "processing");
+    this.jobs = this.jobs.filter((job) => !active.includes(job));
     if (processing) this.activeAbortController?.abort();
     if (active.length) this.emitUpdate();
     return { cleared: active.length, cancelledProcessing: processing };
   }
-  clearCompleted() {
-    const completed = this.jobs.filter((job) => job.status === "complete");
-    this.jobs = this.jobs.filter((job) => job.status !== "complete");
+  clearCompleted(platform) {
+    const completed = this.jobs.filter((job) => job.status === "complete" && (!platform || job.platform === platform));
+    this.jobs = this.jobs.filter((job) => !completed.includes(job));
     if (completed.length) this.emitUpdate();
     return { cleared: completed.length };
   }
@@ -38,8 +38,8 @@ export class JobQueue extends EventEmitter {
     job.status = "processing"; job.startedAt = new Date().toISOString(); this.emitUpdate();
     try {
       const safeBase = path.basename(job.sourceName, path.extname(job.sourceName)).replace(/[^a-z0-9_-]/gi, "_").slice(0, 70) || "clip";
-      const outputPath = path.join(config.directories.output, `${safeBase}_hevc_60fps_${job.id.slice(0, 8)}.mp4`);
-      job.media = await render({ input: job.sourcePath, output: outputPath, signal: this.activeAbortController.signal, onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
+      const outputPath = path.join(config.directories.output, `${safeBase}_${job.platform}_${job.id.slice(0, 8)}.mp4`);
+      job.media = await render({ input: job.sourcePath, output: outputPath, platform: job.platform, signal: this.activeAbortController.signal, onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
       job.outputPath = outputPath; job.progress = 100; job.status = "complete"; job.completedAt = new Date().toISOString(); this.emitUpdate();
       this.emit("complete", job);
     } catch (error) {
