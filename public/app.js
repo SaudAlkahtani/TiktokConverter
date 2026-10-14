@@ -1,3 +1,4 @@
+import { setupNavigation } from '/navigation.js';
 const platform = location.pathname.startsWith('/instagram') ? 'instagram' : 'tiktok';
 const jobsEl = document.querySelector('#jobs');
 const emptyEl = document.querySelector('#empty');
@@ -66,5 +67,12 @@ const clearJobs = async (kind, button) => {
 };
 clearActiveButton.addEventListener('click', () => clearJobs('active', clearActiveButton));
 clearCompletedButton.addEventListener('click', () => clearJobs('completed', clearCompletedButton));
-const stream = new EventSource('/api/events'); stream.onmessage = ({data}) => render(JSON.parse(data));
-stream.onerror = () => { profile.textContent = 'Worker disconnected — make sure npm start is running.'; };
+setupNavigation({
+  nav: document.querySelector('.platform-nav'), window, location,
+  startStream: () => {
+    const stream = new EventSource('/api/events');
+    stream.onmessage = ({data}) => render(JSON.parse(data));
+    stream.onerror = () => { profile.textContent = 'Worker disconnected — reconnecting…'; };
+    return stream;
+  }
+});

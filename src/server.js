@@ -1,3 +1,4 @@
+import { subscribeToJobs } from './events.js';
 import path from "node:path";
 import fs from "node:fs/promises";
 import fssync from "node:fs";
@@ -71,8 +72,7 @@ app.get("/api/jobs/:id/download", async (request, reply) => {
 });
 app.get("/api/events", (request, reply) => {
   reply.hijack(); reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
-  const send = (jobs) => reply.raw.write(`data: ${JSON.stringify(jobs)}\n\n`);
-  send(queue.snapshot()); queue.on("update", send); request.raw.on("close", () => queue.off("update", send));
+  subscribeToJobs(queue, reply.raw);
 });
 
 await app.listen({ port: config.port, host: "127.0.0.1" });
