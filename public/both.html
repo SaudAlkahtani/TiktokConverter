@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Both Platforms · Converter</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="converter-theme">
+    <main><nav class="platform-nav" aria-label="Converter"><a href="/tiktok">TikTok converter</a><a href="/instagram">Instagram converter</a><a href="/both" aria-current="page">Both platforms</a></nav>
+      <section class="hero">
+        <p class="eyebrow">LOCAL VIDEO WORKER</p>
+        <h1>One upload.<br><span>Two exports.</span></h1>
+        <p class="lede">Upload once and get a dedicated video for each platform. TikTok uses HEVC at 60 fps with 2× timestamp scale. Instagram uses H.264 at 30 fps in a true 9:16 frame, at normal speed.</p>
+        <div class="profile" id="profile">Checking worker…</div>
+      </section>
+      <section class="preset-grid"><article><p class="eyebrow">01 / TIKTOK</p><h2>Slow it down.</h2><p>HEVC · 60 fps · 20 Mbps default<br>Timestamp scale 2 · twice the duration<br>Original TikTok audio handling · AAC stereo</p></article><article><p class="eyebrow">02 / INSTAGRAM</p><h2>Ready for Reels.</h2><p>H.264 · 30 fps · 1080 × 1920<br>Normal speed · 9:16 with padding<br>AAC stereo · 48 kHz</p></article></section><section class="guide">
+        <div><b>01</b><span>Choose a <strong>local video</strong></span></div>
+        <div><b>02</b><span>Upload it to this worker</span></div>
+        <div><b>03</b><span>Download the finished MP4</span></div>
+      </section>
+      <section class="upload-card">
+        <p class="eyebrow">ONE SOURCE · TWO DESTINATIONS</p>
+        <form id="upload-form">
+          <label class="file-picker"><input id="video-file" name="video" type="file" accept="video/*,.mov,.mkv,.avi,.webm,.m4v" multiple required /><span id="file-label">Choose videos</span></label>
+          <button type="submit">Create both exports</button>
+        </form>
+        <p class="upload-status" id="upload-status" aria-live="polite">Each source is stored once. Two exports run in order, with separate progress and downloads.</p>
+      </section>
+      <section class="jobs-section">
+        <div class="section-heading"><div><p class="eyebrow">PROCESSING QUEUE</p><h2>Exports</h2></div><div class="queue-tools"><button id="clear-active" class="queue-button" type="button">Clear active</button><button id="clear-completed" class="queue-button" type="button">Clear completed</button><span class="live"><i></i> LIVE</span></div></div>
+        <div id="empty" class="empty">No clips yet. Choose a video above to begin.</div>
+        <div id="jobs" class="jobs"></div>
+      </section>
+      <aside class="note"><strong>Local-only:</strong> uploads, source files, and exports stay in this project’s local media folders. Nothing is sent to a Telegram bot.</aside>
+    </main>
+    <template id="job-template">
+      <article class="job">
+        <div class="job-top"><div class="clip"><div class="clip-icon">▶</div><div><h3></h3><p class="metadata"></p></div></div><span class="status"></span></div>
+        <div class="bar"><span></span></div>
+        <div class="job-bottom"><span class="detail"></span><a class="download" hidden>Download export</a></div>
+      </article>
+    </template>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

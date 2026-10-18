@@ -17,6 +17,7 @@ await queue.prepare();
 await app.register(fastifyStatic, { root: path.join(config.root, "public"), prefix: "/" });
 await app.register(multipart, { limits: { files: config.maxUploadFiles, fileSize: config.uploadLimitBytes } });
 
+app.get('/both', async (request, reply) => reply.sendFile('both.html'));
 app.get('/instagram', async (request, reply) => reply.sendFile('instagram.html'));
 app.get('/tiktok', async (request, reply) => reply.sendFile('index.html'));
 
@@ -28,7 +29,7 @@ app.delete("/api/jobs/active", async (request) => queue.clearActive(request.quer
 app.delete("/api/jobs/completed", async (request) => queue.clearCompleted(request.query.platform));
 app.post("/api/uploads", async (request, reply) => {
   const platform = request.query.platform || 'tiktok';
-  if (!['tiktok', 'instagram'].includes(platform)) return reply.code(400).send({ error: 'Choose TikTok or Instagram.' });
+  if (!['tiktok', 'instagram', 'both'].includes(platform)) return reply.code(400).send({ error: 'Choose TikTok, Instagram or both.' });
   const accepted = [];
   const rejected = [];
   try {
@@ -43,8 +44,12 @@ app.post("/api/uploads", async (request, reply) => {
 
         const stat = await fs.stat(target);
         const source = await probe(target);
-        const job = queue.add({ sourcePath: target, sourceName, bytes: stat.size, platform });
-        accepted.push({ id: job.id, sourceName, bytes: stat.size, source });
+        const groupId = randomUUID();
+        const outputs = (platform === 'both' ? ['tiktok', 'instagram'] : [platform]).map(outputPlatform => queue.add({
+          sourcePath: target, sourceName, bytes: stat.size, platform: outputPlatform,
+          origin: platform, groupId, timestampScale: platform === 'both' && outputPlatform === 'tiktok' ? 2 : undefined
+        }));
+        accepted.push({ id: outputs[0].id, sourceName, bytes: stat.size, source, outputs: outputs.map(job => ({ id: job.id, platform: job.platform })) });
       } catch (error) {
         if (target) await fs.rm(target, { force: true });
         const tooLarge = error.code === "FST_REQ_FILE_TOO_LARGE" || error.message.includes("configured limit");

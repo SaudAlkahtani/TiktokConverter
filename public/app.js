@@ -1,5 +1,5 @@
 import { setupNavigation } from '/navigation.js';
-const platform = location.pathname.startsWith('/instagram') ? 'instagram' : 'tiktok';
+const platform = location.pathname.startsWith('/both') ? 'both' : location.pathname.startsWith('/instagram') ? 'instagram' : 'tiktok';
 const jobsEl = document.querySelector('#jobs');
 const emptyEl = document.querySelector('#empty');
 const template = document.querySelector('#job-template');
@@ -12,11 +12,11 @@ const clearActiveButton = document.querySelector('#clear-active');
 const clearCompletedButton = document.querySelector('#clear-completed');
 const bytes = (n=0) => n < 1024 ** 2 ? `${Math.round(n/1024)} KB` : `${(n/1024**2).toFixed(1)} MB`;
 const render = (jobs) => {
-  jobs = jobs.filter(job => (job.platform || "tiktok") === platform);
+  jobs = jobs.filter(job => platform === "both" ? job.origin === "both" : (job.platform || "tiktok") === platform);
   jobsEl.replaceChildren(); emptyEl.hidden = jobs.length > 0;
   for (const job of jobs) {
     const node = template.content.cloneNode(true); const el = node.querySelector('.job');
-    node.querySelector('h3').textContent = job.sourceName;
+    node.querySelector('h3').textContent = `${job.platform === 'instagram' ? 'Instagram' : 'TikTok'} · ${job.sourceName}`;
     node.querySelector('.metadata').textContent = `${bytes(job.bytes)} · queued ${new Date(job.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
@@ -26,7 +26,7 @@ const render = (jobs) => {
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === "instagram" ? "Reels · 1080×1920 · H.264 · 30 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · 48 kHz stereo" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === "both" ? "One upload → TikTok (timestamp scale 2) + Instagram (normal speed) · two separate downloads" : platform === "instagram" ? "Reels · 1080×1920 · H.264 · 30 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · 48 kHz stereo" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;
@@ -43,7 +43,7 @@ form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(result.error || 'Upload failed.');
     const accepted = result.jobs || (result.job ? [result.job] : []);
     const rejected = result.rejected || [];
-    uploadStatus.textContent = `${accepted.length} video${accepted.length === 1 ? '' : 's'} added in first-in, first-out order.${rejected.length ? ` ${rejected.length} could not be added.` : ''}`;
+    uploadStatus.textContent = `${accepted.length} video${accepted.length === 1 ? '' : 's'} added${platform === "both" ? " · two exports per file" : ""} in first-in, first-out order.${rejected.length ? ` ${rejected.length} could not be added.` : ''}`;
     form.reset(); fileLabel.textContent = 'Choose videos';
   } catch (error) { uploadStatus.textContent = error.message; }
   finally { button.disabled = false; }

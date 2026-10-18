@@ -37,20 +37,20 @@ const throwIfAborted = (signal) => {
   if (signal?.aborted) throw new RenderCancelledError();
 };
 
-export async function render({ input, output, onProgress = () => {}, signal, platform = "tiktok" }) {
+export async function render({ input, output, onProgress = () => {}, signal, platform = "tiktok", timestampScale = config.inputTimestampScale }) {
   throwIfAborted(signal);
   const media = await probe(input);
   throwIfAborted(signal);
   // -itsscale changes the output timeline. Progress arrives in output time, so
   // compare it with the scaled duration rather than the source duration.
   const instagram = platform === "instagram";
-  const expectedDuration = media.duration * (instagram ? 1 : config.inputTimestampScale);
+  const expectedDuration = media.duration * (instagram ? 1 : timestampScale);
   const filters = [
     "fps=60",
     config.export.sharpen
   ].filter(Boolean).join(",");
   const args = instagram ? buildInstagramArgs(input, output, media) : [
-    "-hide_banner", "-y", "-itsscale", String(config.inputTimestampScale), "-i", input,
+    "-hide_banner", "-y", "-itsscale", String(timestampScale), "-i", input,
     "-map", "0:v:0", "-map", "0:a?",
     "-vf", filters,
     "-c:v", config.export.videoCodec, "-b:v", config.export.bitrate, "-g", String(config.export.gop),
