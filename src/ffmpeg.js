@@ -42,8 +42,8 @@ export async function render({ input, output, onProgress = () => {}, signal, pla
   throwIfAborted(signal);
   const media = await probe(input);
   throwIfAborted(signal);
-  // -itsscale changes the output timeline. Progress arrives in output time, so
-  // compare it with the scaled duration rather than the source duration.
+  // TikTok scales video timestamps only. Audio comes from a second, unscaled
+  // input so its original timing and pitch are preserved.
   const instagram = platform === "instagram";
   const selected = await selectEncoder(encoder, instagram ? 'h264' : 'hevc');
   const expectedDuration = media.duration * (instagram ? 1 : timestampScale);
@@ -52,13 +52,12 @@ export async function render({ input, output, onProgress = () => {}, signal, pla
     config.export.sharpen
   ].filter(Boolean).join(",");
   const args = instagram ? buildInstagramArgs(input, output, media, selected.encoder) : [
-    "-hide_banner", "-y", "-itsscale", String(timestampScale), "-i", input,
-    "-map", "0:v:0", "-map", "0:a?",
+    "-hide_banner", "-y", "-itsscale", String(timestampScale), "-i", input, "-i", input,
+    "-map", "0:v:0", "-map", "1:a:0?",
     "-vf", filters,
     "-c:v", selected.encoder, "-b:v", config.export.bitrate, "-g", String(config.export.gop),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
     "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0", "-pix_fmt", "yuv420p",
-    ...(media.hasAudio && timestampScale === 2 ? ['-af', 'asetpts=N/SR/TB,atempo=0.5'] : []),
     "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2",
     "-progress", "pipe:1", "-nostats", output
   ];

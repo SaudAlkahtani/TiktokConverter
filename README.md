@@ -64,7 +64,7 @@ creates two separately downloadable MP4 files:
 
 | Export | Video | Timing | Audio |
 | --- | --- | --- | --- |
-| TikTok | HEVC/H.265, source dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` (twice the source duration) | AAC stereo 256 kbps; audio slowed to match while preserving pitch |
+| TikTok | HEVC/H.265, source dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` for video (twice the source duration) | Original-speed audio, AAC stereo 256 kbps; ends at the source duration |
 | Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 30 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
 
 Instagram preserves the full picture with aspect-aware padding rather than

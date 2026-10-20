@@ -29,7 +29,7 @@ test('one source produces distinct TikTok scale-2 and Instagram normal-speed out
    const result=spawnSync(config.ffprobe,['-v','error','-show_streams','-of','json',job.outputPath],{encoding:'utf8',windowsHide:true});
    const streams=JSON.parse(result.stdout).streams;assert.equal(streams.find(s=>s.codec_type==='video').codec_name,codec);
    const audio=streams.find(s=>s.codec_type==='audio');assert.equal(audio.codec_name,'aac');assert.equal(audio.channels,2);assert.equal(audio.sample_rate,'48000');
-   if(job.platform==='instagram') assert.ok(Math.abs(Number(audio.duration)-duration)<0.2);
+   assert.ok(Math.abs(Number(audio.duration)-1)<0.2,`${job.platform} audio duration ${audio.duration}`);
   }
   assert.equal(queue.clearCompleted('both').cleared,2);
  }finally{config.directories.output=previous;await fs.rm(folder,{recursive:true,force:true});}
