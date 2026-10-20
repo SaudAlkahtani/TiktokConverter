@@ -21,11 +21,11 @@ export class JobQueue extends EventEmitter {
       this.add({ sourcePath, sourceName, bytes, platform: 'instagram', origin, groupId, encoder })
     ];
   }
-  addEditor({ sourcePath, sourceName, bytes, voicePath, pipPath, settings }) {
+  addEditor({ sourcePath, sourcePaths = [sourcePath], sourceName, bytes, voicePath, pipPath, settings }) {
     const job = { id: randomUUID(), sourcePath, sourceName, bytes, platform: 'editor', origin: 'editor', status: 'queued', progress: 0,
       createdAt: new Date().toISOString(), outputPath: null, editSummary: { destination: settings.destination, encoder: settings.encoder,
-        autoFaces: settings.autoFaces, blurRegions: settings.blurRegions.length, voice: Boolean(voicePath), pip: Boolean(pipPath) },
-      editor: { voicePath, pipPath, settings } };
+        sources: sourcePaths.length, clips: settings.segments.length, autoFaces: settings.autoFaces, blurRegions: settings.blurRegions.length, voice: Boolean(voicePath), pip: Boolean(pipPath) },
+      editor: { sourcePaths, voicePath, pipPath, settings } };
     this.jobs.push(job); this.emitUpdate(); this.pump(); return job;
   }
   get(id) { return this.jobs.find((job) => job.id === id); }
@@ -54,7 +54,7 @@ export class JobQueue extends EventEmitter {
       const safeBase = path.basename(job.sourceName, path.extname(job.sourceName)).replace(/[^a-z0-9_-]/gi, "_").slice(0, 70) || "clip";
       const outputPath = path.join(config.directories.output, `${safeBase}_${job.platform}_${job.id.slice(0, 8)}.mp4`);
       if (job.platform === 'editor') {
-        job.media = await renderEdit({ input: job.sourcePath, output: outputPath, voicePath: job.editor.voicePath, pipPath: job.editor.pipPath,
+        job.media = await renderEdit({ inputPaths: job.editor.sourcePaths, output: outputPath, voicePath: job.editor.voicePath, pipPath: job.editor.pipPath,
           settings: job.editor.settings, signal: this.activeAbortController.signal, onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
       } else {
         job.media = await render({ input: job.sourcePath, output: outputPath, platform: job.platform, timestampScale: job.timestampScale, encoder: job.encoder,

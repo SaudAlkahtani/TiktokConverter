@@ -11,7 +11,7 @@ import { config } from "./config.js";
 import { JobQueue } from "./queue.js";
 import { probe } from "./ffmpeg.js";
 import { encoderCapabilities } from './encoders.js';
-import { faceDetectorAvailable, hasAudioStream, validateEditSettings } from './editor.js';
+import { faceDetectorAvailable, hasAudioStream, probeSources, validateEditSettings } from './editor.js';
 
 const app = Fastify({ logger: true });
 const queue = new JobQueue();
@@ -34,39 +34,44 @@ app.delete("/api/jobs/completed", async (request) => queue.clearCompleted(reques
 app.post('/api/editor/jobs', async (request, reply) => {
   const origin = request.headers.origin;
   if (origin && origin !== `http://127.0.0.1:${config.port}`) return reply.code(403).send({ error: 'Open the editor on this local server.' });
-  const files = {};
+  const files = { sources: [] };
   let settingsText = null;
   try {
-    for await (const part of request.parts({ limits: { files: 3, fileSize: config.uploadLimitBytes } })) {
+    for await (const part of request.parts({ limits: { files: Infinity, parts: Infinity, fieldSize: 16 * 1024 * 1024,
+      fileSize: config.uploadLimitBytes } })) {
       if (part.type === 'field') {
         if (part.fieldname === 'settings') settingsText = String(part.value);
         continue;
       }
-      if (!['source', 'voice', 'pip'].includes(part.fieldname) || files[part.fieldname]) throw new Error('Choose one source, and at most one voice or picture in picture file.');
+      if (!['source', 'voice', 'pip'].includes(part.fieldname)) throw new Error('Only source, voice and picture-in-picture files are accepted.');
+      if (part.fieldname !== 'source' && files[part.fieldname]) throw new Error('Choose at most one voice or picture-in-picture file.');
       const name = safeName(part.filename);
       const filePath = path.join(config.directories.incoming, `${Date.now()}-${randomUUID()}-${name}`);
-      files[part.fieldname] = { path: filePath, name };
+      const stored = { path: filePath, name };
+      if (part.fieldname === 'source') files.sources.push(stored);
+      else files[part.fieldname] = stored;
       await pipeline(part.file, fssync.createWriteStream(filePath, { flags: 'wx' }));
       if (part.file.truncated) throw new Error('A file exceeded the configured input limit.');
     }
-    if (!files.source) throw new Error('Choose a source video first.');
-    const media = await probe(files.source.path);
-    if (!Number.isFinite(media.duration) || media.duration <= 0) throw new Error('The source needs a readable duration.');
+    if (!files.sources.length) throw new Error('Choose at least one source video first.');
+    const sourceMedia = await probeSources(files.sources.map(file => file.path));
+    if (sourceMedia.some(media => !Number.isFinite(media.duration) || media.duration <= 0)) throw new Error('Every source needs a readable duration.');
     if (files.pip) await probe(files.pip.path);
     if (files.voice && !await hasAudioStream(files.voice.path)) throw new Error('The voice file has no readable audio track.');
     let raw;
     try { raw = JSON.parse(settingsText || ''); } catch { throw new Error('Editing settings are invalid.'); }
-    const settings = validateEditSettings(raw, media.duration);
+    const settings = validateEditSettings(raw, sourceMedia);
     if (settings.autoFaces && !await faceDetectorAvailable()) throw new Error('Automatic face blur needs Python, OpenCV and NumPy. Install requirements-editor.txt or use manual blur areas.');
     if (settings.encoder !== 'auto' && settings.encoder !== 'cpu') {
       const available = await encoderCapabilities();
       if (!available[settings.encoder]) throw new Error(`${settings.encoder.toUpperCase()} encoding is unavailable on this machine.`);
     }
-    const job = queue.addEditor({ sourcePath: files.source.path, sourceName: files.source.name,
-      bytes: (await fs.stat(files.source.path)).size, voicePath: files.voice?.path, pipPath: files.pip?.path, settings });
-    return reply.code(202).send({ id: job.id, source: media, destination: settings.destination });
+    const sizes = await Promise.all(files.sources.map(file => fs.stat(file.path)));
+    const job = queue.addEditor({ sourcePaths: files.sources.map(file => file.path), sourceName: files.sources[0].name,
+      bytes: sizes.reduce((total, stat) => total + stat.size, 0), voicePath: files.voice?.path, pipPath: files.pip?.path, settings });
+    return reply.code(202).send({ id: job.id, source: sourceMedia[0], sources: sourceMedia, destination: settings.destination });
   } catch (error) {
-    await Promise.all(Object.values(files).map((file) => fs.rm(file.path, { force: true })));
+    await Promise.all([...files.sources, ...[files.voice, files.pip].filter(Boolean)].map(file => fs.rm(file.path, { force: true })));
     request.log.warn({ err: error }, 'Editor upload rejected');
     return reply.code(error.code === 'FST_REQ_FILE_TOO_LARGE' ? 413 : 400).send({ error: error.message.slice(0, 700) });
   }

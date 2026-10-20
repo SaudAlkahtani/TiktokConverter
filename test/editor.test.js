@@ -21,6 +21,16 @@ test('editor validates privacy areas, destination and GPU choices', () => {
   assert.throws(() => validateEditSettings({ blurRegions: [], pipEnd: 3 }, 2), /end/i);
   assert.equal(validateEditSettings({ blurRegions: [], destination: 'both' }, 2).destination, 'both');
   assert.throws(() => validateEditSettings({ blurRegions: [], destination: 'instagram' }, 2), /together/);
+  assert.throws(() => validateEditSettings({ blurRegions: [], segments: [] }, 2), /timeline clip/i);
+  assert.equal(validateEditSettings({ blurRegions: [], segments: Array.from({length:101}, () => ({start:0,end:1})) }, 2).segments.length,101);
+  assert.equal(validateEditSettings({ blurRegions: [], segments: [{start:0,end:1},{start:.5,end:2}] }, 2).segments.length,2);
+  assert.equal(validateEditSettings({ blurRegions: [], segments: [{start:1,end:2},{start:0,end:1}] }, 2).segments[0].start,1);
+  assert.equal(validateEditSettings({ blurRegions: [], segments: [{start:0,end:2.0001}] }, 2).segments[0].end,2);
+  assert.throws(() => validateEditSettings({ blurRegions: [], segments: [{sourceIndex:1,start:0,end:1}] }, [2]), /unknown source/i);
+  assert.throws(() => validateEditSettings({ blurRegions: [], segments: [{start:0,end:1,videoEnabled:false,audioEnabled:false}] }, 2), /neither video nor audio/i);
+  assert.equal(validateEditSettings({ blurRegions: [], segments: [{start:0,end:1,videoEnabled:false,audioEnabled:true}] }, 2).segments[0].videoEnabled,false);
+  assert.equal(validateEditSettings({ blurRegions: [], voiceIn:.25, voiceOut:.75 }, 2).voiceOut,.75);
+  assert.throws(() => validateEditSettings({ blurRegions: [], voiceIn:1, voiceOut:.5 }, 2), /Voice out/i);
 });
 
 test('edit mixes voice, reduces source sound, blurs a region and overlays video before platform export', async () => {
@@ -70,6 +80,128 @@ test('edited 4K master preserves dimensions and 60 fps',async()=>{
   }finally{await fs.rm(folder,{recursive:true,force:true});}
 });
 
+test('timeline cuts and rearranges the rendered master with matching audio duration', async () => {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'gym-editor-cuts-'));
+  try {
+    const input = path.join(folder, 'source.mp4'), output = path.join(folder, 'cut.mp4');
+    ffmpeg(['-f','lavfi','-i','color=c=red:s=160x288:r=60:d=0.5',
+      '-f','lavfi','-i','color=c=blue:s=160x288:r=60:d=0.5',
+      '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=1',
+      '-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]','-map','2:a',
+      '-c:v','libx264','-preset','ultrafast','-c:a','aac',input]);
+    const source = await probe(input);
+    const settings = validateEditSettings({ blurRegions: [], autoFaces: false, encoder: 'cpu',
+      segments: [{start:.5,end:1},{start:0,end:.4}] }, source.duration);
+    const result = await renderEdit({ input, output, settings });
+    assert.equal(result.fps, '60/1');
+    assert.ok(Math.abs(result.duration - .9) < .08, `Expected a 0.9-second cut, got ${result.duration}`);
+    const sample = (time) => {
+      const frame = spawnSync(config.ffmpeg, ['-v','error','-ss',String(time),'-i',output,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','-'], { windowsHide:true });
+      assert.equal(frame.status,0,frame.stderr?.toString());
+      const pixel = frame.stdout.subarray(0,3);
+      return [pixel[0], pixel[2]];
+    };
+    const first = sample(.1), second = sample(.65);
+    assert.ok(first[1] > first[0] + 70, `First clip should be blue: ${first}`);
+    assert.ok(second[0] > second[1] + 70, `Second clip should be red: ${second}`);
+    const audio = spawnSync(config.ffprobe, ['-v','error','-select_streams','a:0','-show_entries','stream=duration','-of','default=noprint_wrappers=1:nokey=1',output], { encoding:'utf8', windowsHide:true });
+    assert.equal(audio.status,0,audio.stderr);
+    assert.ok(Math.abs(Number(audio.stdout.trim()) - result.duration) < .08);
+  } finally { await fs.rm(folder, { recursive:true, force:true }); }
+});
+
+test('unlinked track deletion exports silent video and audio-only black frames in their aligned slots', async () => {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'gym-editor-unlinked-'));
+  try {
+    const input = path.join(folder,'source.mp4'), output = path.join(folder,'unlinked.mp4');
+    ffmpeg(['-f','lavfi','-i','color=c=red:s=160x288:r=60:d=0.8',
+      '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=0.8',
+      '-c:v','libx264','-preset','ultrafast','-c:a','aac',input]);
+    const media = await probe(input);
+    const settings = validateEditSettings({blurRegions:[],autoFaces:false,encoder:'cpu',segments:[
+      {sourceIndex:0,start:0,end:.4,videoEnabled:true,audioEnabled:false},
+      {sourceIndex:0,start:.4,end:.8,videoEnabled:false,audioEnabled:true}
+    ]},[media]);
+    const result = await renderEdit({input,output,settings});
+    assert.equal(result.hasAudio,true);
+    const pixelAt = time => {
+      const frame = spawnSync(config.ffmpeg,['-v','error','-ss',String(time),'-i',output,'-frames:v','1',
+        '-vf','crop=2:2:80:144','-pix_fmt','rgb24','-f','rawvideo','-'],{windowsHide:true});
+      assert.equal(frame.status,0,frame.stderr?.toString());
+      return frame.stdout.subarray(0,3);
+    };
+    assert.ok(pixelAt(.15)[0]>130,'The first slot keeps red video.');
+    assert.ok(pixelAt(.6).every(value=>value<30),'The audio-only slot renders black.');
+    const audioLevel = time => {
+      const sample = spawnSync(config.ffmpeg,['-v','error','-ss',String(time),'-i',output,'-t','0.1','-vn',
+        '-ac','1','-ar','48000','-f','s16le','-'],{windowsHide:true});
+      assert.equal(sample.status,0,sample.stderr?.toString());
+      let peak=0;
+      for(let i=0;i+1<sample.stdout.length;i+=2) peak=Math.max(peak,Math.abs(sample.stdout.readInt16LE(i)));
+      return peak;
+    };
+    assert.ok(audioLevel(.15)<50,'The video-only slot must be silent.');
+    assert.ok(audioLevel(.6)>200,'The audio-only slot keeps camera audio.');
+  } finally { await fs.rm(folder,{recursive:true,force:true}); }
+});
+
+test('voice monitor In/Out trim and timeline offset are reflected in the exported audio', async () => {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'gym-editor-voice-trim-'));
+  try {
+    const input = path.join(folder,'silent.mp4'), voice = path.join(folder,'voice.wav'), output = path.join(folder,'voice-edit.mp4');
+    ffmpeg(['-f','lavfi','-i','color=c=blue:s=160x288:r=60:d=1','-c:v','libx264','-preset','ultrafast',input]);
+    ffmpeg(['-f','lavfi','-i','sine=frequency=660:sample_rate=48000:duration=1','-c:a','pcm_s16le',voice]);
+    const settings = validateEditSettings({blurRegions:[],autoFaces:false,encoder:'cpu',
+      voiceIn:.2,voiceOut:.5,voiceStart:.1},1);
+    const result = await renderEdit({input,output,voicePath:voice,settings});
+    assert.equal(result.hasAudio,true);
+    const peakAt = time => {
+      const sample = spawnSync(config.ffmpeg,['-v','error','-ss',String(time),'-i',output,'-t','0.08','-vn',
+        '-ac','1','-ar','48000','-f','s16le','-'],{windowsHide:true});
+      assert.equal(sample.status,0,sample.stderr?.toString());
+      let peak=0;
+      for(let i=0;i+1<sample.stdout.length;i+=2) peak=Math.max(peak,Math.abs(sample.stdout.readInt16LE(i)));
+      return peak;
+    };
+    assert.ok(peakAt(.16)>200,'Voice should begin after its timeline offset.');
+    assert.ok(peakAt(.6)<50,'Voice should be silent after its Out point.');
+  } finally { await fs.rm(folder,{recursive:true,force:true}); }
+});
+
+test('six exercise videos merge in timeline order with mixed orientations and silent clips', async () => {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'gym-editor-six-'));
+  try {
+    const colors = ['red','blue','green','yellow','magenta','cyan'];
+    const inputs = [];
+    for (const [index, color] of colors.entries()) {
+      const input = path.join(folder, `exercise-${index}.mp4`), size = index % 2 ? '288x160' : '160x288';
+      const args = ['-f','lavfi','-i',`color=c=${color}:s=${size}:r=30:d=0.35`];
+      if (index % 2 === 0) args.push('-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=0.35');
+      args.push('-c:v','libx264','-preset','ultrafast');
+      if (index % 2 === 0) args.push('-c:a','aac');
+      ffmpeg([...args,input]); inputs.push(input);
+    }
+    const media = await Promise.all(inputs.map(probe));
+    const segments = media.map((_, sourceIndex) => ({ sourceIndex, start:.05, end:.25 }));
+    segments.push({sourceIndex:0,start:.25,end:.34});
+    for (const sourceIndex of [1,2,3]) segments.push({sourceIndex,start:.05,end:.15});
+    const settings = validateEditSettings({ autoFaces:false, blurRegions:[{x:.6,y:.1,w:.2,h:.2,start:.4,end:.8}],
+      segments, encoder:'cpu' }, media);
+    const output = path.join(folder, 'six-exercises.mp4');
+    const result = await renderEdit({ inputPaths:inputs, output, settings });
+    assert.equal(result.width,160);assert.equal(result.height,288);assert.equal(result.fps,'60/1');
+    assert.equal(result.hasAudio,true);
+    assert.ok(Math.abs(result.duration - 1.59) < .12, `Merged duration ${result.duration}`);
+    const audio = spawnSync(config.ffprobe,['-v','error','-select_streams','a:0','-show_entries','stream=duration','-of','default=noprint_wrappers=1:nokey=1',output],{encoding:'utf8',windowsHide:true});
+    assert.equal(audio.status,0,audio.stderr);
+    assert.ok(Math.abs(Number(audio.stdout.trim()) - result.duration) < .12);
+    const frame = spawnSync(config.ffmpeg,['-v','error','-ss','1.52','-i',output,'-frames:v','1','-vf','crop=2:2:80:144','-pix_fmt','rgb24','-f','rawvideo','-'],{windowsHide:true});
+    assert.equal(frame.status,0,frame.stderr?.toString());
+    const pixel = frame.stdout.subarray(0,3);
+    assert.ok(pixel[0] > 100 && pixel[1] > 100 && pixel[2] < 80, `Last batch should show the yellow source: ${[...pixel]}`);
+  } finally { await fs.rm(folder,{recursive:true,force:true}); }
+});
+
 test('automatic face mask is generated from video frames and can include a manual privacy region', async () => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'gym-face-mask-'));
   try {
@@ -97,12 +229,19 @@ test('local editor upload queues a 60 fps master and two finished platform expor
     for (let i = 0; i < 50; i++) { try { ready = (await fetch(base + '/api/health')).ok; } catch {} if (ready) break; await new Promise(r => setTimeout(r, 100)); }
     assert.ok(ready, stderr);
     assert.equal((await fetch(base + '/editor')).status, 200);
-    const input = path.join(folder, 'source.mp4');
+    const input = path.join(folder, 'source.mp4'), second = path.join(folder, 'second.mp4');
     ffmpeg(['-f','lavfi','-i','testsrc2=size=180x320:rate=30:duration=0.6','-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=0.6','-c:v','libx264','-preset','ultrafast','-c:a','aac',input]);
+    ffmpeg(['-f','lavfi','-i','color=c=blue:s=320x180:r=30:d=0.6','-c:v','libx264','-preset','ultrafast',second]);
     const body = new FormData(); body.append('source', new Blob([await fs.readFile(input)], { type: 'video/mp4' }), 'source.mp4');
-    body.append('settings', JSON.stringify({autoFaces:false,blurRegions:[{x:.5,y:.1,w:.3,h:.3,start:0,end:.6}],destination:'both',encoder:'cpu'}));
+    body.append('source', new Blob([await fs.readFile(second)], { type: 'video/mp4' }), 'second.mp4');
+    const extraSource = await fs.readFile(second);
+    for (let index=0; index<20; index++) body.append('source', new Blob([extraSource], { type:'video/mp4' }), `extra-${index}.mp4`);
+    body.append('settings', JSON.stringify({autoFaces:false,blurRegions:[{x:.5,y:.1,w:.3,h:.3,start:0,end:.45}],
+      segments:[{sourceIndex:0,start:0,end:.2},{sourceIndex:1,start:.35,end:.6}],destination:'both',encoder:'cpu'}));
     const upload = await fetch(base + '/api/editor/jobs', { method:'POST', body });
-    assert.equal(upload.status, 202, await upload.text());
+    const uploadBody = await upload.json();
+    assert.equal(upload.status, 202, JSON.stringify(uploadBody));
+    assert.equal(uploadBody.sources.length,22);
     let jobs;
     for (let i = 0; i < 200; i++) {
       jobs = await (await fetch(base + '/api/jobs')).json();
@@ -115,6 +254,8 @@ test('local editor upload queues a 60 fps master and two finished platform expor
     assert.ok(jobs.every(job => job.downloadable));
     const tiktok = jobs.find(job => job.platform === 'tiktok');
     const instagram = jobs.find(job => job.platform === 'instagram');
+    assert.ok(Math.abs(jobs.find(job => job.platform === 'editor').media.duration - .45) < .1);
+    assert.ok(Math.abs(tiktok.media.duration - .9) < .15);
     assert.equal(tiktok.timestampScale,2);
     assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'30/1');
     assert.equal(tiktok.groupId,jobs.find(job => job.platform === 'editor').id);
@@ -122,6 +263,7 @@ test('local editor upload queues a 60 fps master and two finished platform expor
     const audioProbe = spawnSync(config.ffprobe, ['-v','error','-select_streams','a:0','-show_entries','stream=duration','-of','default=noprint_wrappers=1:nokey=1',
       path.join(folder,'output',tiktok.media.output)], { encoding:'utf8', windowsHide:true });
     assert.equal(audioProbe.status,0,audioProbe.stderr);
-    assert.ok(Math.abs(Number(audioProbe.stdout.trim())-tiktok.media.duration)<0.2, `TikTok voice timing ${audioProbe.stdout.trim()} vs ${tiktok.media.duration}`);
+    const masterDuration = jobs.find(job => job.platform === 'editor').media.duration;
+    assert.ok(Math.abs(Number(audioProbe.stdout.trim())-masterDuration)<0.2, `TikTok voice timing ${audioProbe.stdout.trim()} vs original ${masterDuration}`);
   } finally { server.kill(); await once(server,'close'); await fs.rm(folder,{recursive:true,force:true}); }
 });

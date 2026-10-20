@@ -51,20 +51,51 @@ video service. The local dashboard is available only on `127.0.0.1`.
 
 ## Edit and export
 
-Choose a source video, including 4K clips. Draw timed blur regions over
+Import any number of source videos, including 4K clips, subject to your machine's
+available storage and processing capacity. Draw timed blur regions over
 background faces, or enable automatic face detection and mark **Keep clear**
 over your own face. Check every finished frame: automatic detection can miss
 small, turned, or moving faces. Optionally add voice audio, lower the original
 sound, and add a timed picture-in-picture clip (its sound is muted). Select
 Auto, CPU, NVIDIA NVENC, or AMD AMF, then start the edit.
 
-The editor first makes a downloadable, source-dimension 60 fps master. It then
-passes that master to the **same combined converter used by `/both`**, which
+The project bin accepts multiple videos in one selection or in later batches.
+The editor has separate source and project monitors: preview a selected source,
+use **Mark In**/**Mark Out**, then add it to the project timeline. The project
+monitor previews the assembled sequence.
+Click **Add all full videos** to join them in import order, or choose any video's
+**In** and **Out** seconds and click **Add range**. You can add the same source
+many times. Click the ruler or scrub bar to place the playhead, press **S** or
+**Split at playhead** to cut a clip, select a clip to set exact In/Out trim points,
+then remove it, drag it to a new position, or use Move left/right. To remove a
+middle section, split at both ends and remove the middle clip. **Clear timeline**
+empties the sequence but keeps imported sources. The zoom slider and horizontal
+scroll let you navigate longer timelines without squeezing every clip into view.
+These operations do not alter the original files. The V1 track shows the merged
+video; A1 sits directly beneath it with its aligned camera audio. Select either
+row. **Shift+G** unlinks the pair; **Delete** then removes only the selected
+video or audio row while preserving the other and its position. **Shift+L**
+relinks an intact pair, and **Restore selected track** brings a removed row back
+from the source. **Shift+R** splits at the playhead. **Revert** or **Ctrl+Z**
+undoes the last timeline edit; **Ctrl+Shift+Z** redoes it. Linked deletion removes
+both rows. A2 and V2 show optional voice and picture in picture. The separate
+voice monitor lets you listen to a recording, mark its source In/Out points,
+adjust its volume, and choose where it starts in the timeline.
+The project monitor jumps between source videos during sequence playback. Blur, voice
+start and overlay times use the **merged sequence clock**. Review the finished
+video for missed faces and correct audio timing before sharing.
+
+The editor first makes a downloadable 60 fps master. Its canvas uses the first
+timeline clip's dimensions; other sources are aspect-preserved and padded to
+fit. The editor assembles longer timelines in small FFmpeg batches, joins them
+into one high-bitrate temporary sequence, and removes the intermediate files
+after processing. The merged master then passes through the **same combined
+converter used by `/both`**, which
 creates two separately downloadable MP4 files:
 
 | Export | Video | Timing | Audio |
 | --- | --- | --- | --- |
-| TikTok | HEVC/H.265, source dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` for video (twice the source duration) | Original-speed audio, AAC stereo 256 kbps; ends at the source duration |
+| TikTok | HEVC/H.265, master dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` for video (twice the merged duration) | Original-speed audio, AAC stereo 256 kbps; ends at the source duration |
 | Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 30 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
 
 Instagram preserves the full picture with aspect-aware padding rather than
