@@ -20,7 +20,7 @@ test('Instagram exports have square pixels and a 9:16 display ratio', async () =
       assert.equal(result.height, 1920, name);
       assert.equal(result.sampleAspectRatio, '1:1', name);
       assert.equal(result.displayAspectRatio, '9:16', name);
-      assert.equal(result.fps, '60/1', name);
+      assert.equal(result.fps, '30/1', name);
     }
   } finally {
     await fs.rm(folder, { recursive: true, force: true });

@@ -23,7 +23,7 @@ test('one source produces distinct TikTok scale-2 and Instagram normal-speed out
   assert.equal(tiktok.groupId,instagram.groupId);
   assert.notEqual(tiktok.outputPath,instagram.outputPath);
   assert.equal(tiktok.media.fps,'60/1'); assert.ok(Math.abs(tiktok.media.duration-2)<0.2,`TikTok duration ${tiktok.media.duration}`);
-  assert.equal(instagram.media.fps,'60/1');assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);
+  assert.equal(instagram.media.fps,'30/1');assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);
   assert.equal(instagram.media.displayAspectRatio,'9:16');assert.ok(Math.abs(instagram.media.duration-1)<0.2);
   for(const [job,codec,duration] of [[tiktok,'hevc',2],[instagram,'h264',1]]) {
    const result=spawnSync(config.ffprobe,['-v','error','-show_streams','-of','json',job.outputPath],{encoding:'utf8',windowsHide:true});

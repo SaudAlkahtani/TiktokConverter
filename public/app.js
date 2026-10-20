@@ -21,12 +21,12 @@ const render = (jobs) => {
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.platform === "instagram" ? "H.264 · 1080×1920 · 60fps" : "HEVC · 60fps"}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.platform === "instagram" ? "H.264 · 1080×1920 · 30fps" : "HEVC · 60fps"}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === "both" ? "One upload → TikTok (timestamp scale 2) + Instagram (1080×1920 / 60 fps, normal speed) · two separate downloads" : platform === "instagram" ? "Reels · 1080×1920 · H.264 · 60 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · 48 kHz stereo" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === "both" ? "One upload → TikTok (timestamp scale 2) + Instagram (1080×1920 / 30 fps, normal speed) · two separate downloads" : platform === "instagram" ? "Reels · 1080×1920 · H.264 · 30 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · 48 kHz stereo" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;

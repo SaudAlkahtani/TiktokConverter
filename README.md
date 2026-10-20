@@ -65,13 +65,13 @@ creates two separately downloadable MP4 files:
 | Export | Video | Timing | Audio |
 | --- | --- | --- | --- |
 | TikTok | HEVC/H.265, source dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` (twice the source duration) | AAC stereo 256 kbps; audio slowed to match while preserving pitch |
-| Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 60 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
+| Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 30 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
 
 Instagram preserves the full picture with aspect-aware padding rather than
-cropping. Its 2-second GOP uses 120 frames at 60 fps. HDR PQ/HLG sources are
+cropping. Its 2-second GOP uses 60 frames at 30 fps. HDR PQ/HLG sources are
 tone-mapped to SDR. TikTok sharpens moderately by default and does not resize;
 change `VIDEO_SHARPEN` or `VIDEO_BITRATE` in `.env` if needed. The standalone
-`/instagram` page uses the same 60 fps Instagram profile. The standalone
+`/instagram` page uses the same 30 fps Instagram profile. The standalone
 `/tiktok` page uses `VIDEO_TIMESTAMP_SCALE` (default 2); the combined workflow
 always specifies scale 2 explicitly.
 
