@@ -74,6 +74,6 @@ The converter does not trim clips or enforce Instagram publishing duration/file-
 
 ## Both platforms tab
 
-Open `/both` to upload each source once and queue two independent exports. TikTok explicitly uses timestamp scale 2 (HEVC, 60 fps, existing configurable bitrate), with the original TikTok audio handling (AAC stereo, 256 kbps; no added tempo filter). Instagram keeps normal speed and the existing 1080x1920 H.264 / 30 fps / AAC profile. Each export has its own progress, failure status and download; a failed export does not prevent its partner from running. The Both tab's clear buttons operate only on exports submitted through that tab. Platform tabs also show their respective outputs from combined uploads.
+Open `/both` to upload each source once and queue two independent exports. TikTok explicitly uses timestamp scale 2 for video (HEVC, 60 fps, existing configurable bitrate), while audio keeps its original timing and pitch (AAC stereo, 256 kbps; no tempo filter). For a one-minute source at scale 2, the video lasts two minutes and the original audio ends after one minute. Instagram keeps normal speed and the existing 1080x1920 H.264 / 30 fps / AAC profile. Each export has its own progress, failure status and download; a failed export does not prevent its partner from running. The Both tab's clear buttons operate only on exports submitted through that tab. Platform tabs also show their respective outputs from combined uploads.
 
 Run `node --test test/*.test.js` for conversion and navigation checks.
