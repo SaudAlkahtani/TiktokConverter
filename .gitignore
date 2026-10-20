@@ -7,6 +7,8 @@ incoming/
 output/
 *.log
 logs/
+__pycache__/
+*.pyc
 local-bot-api/secrets.env
 local-bot-api/data/
 local-bot-api/build/

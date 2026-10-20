@@ -77,3 +77,53 @@ The converter does not trim clips or enforce Instagram publishing duration/file-
 Open `/both` to upload each source once and queue two independent exports. TikTok explicitly uses timestamp scale 2 (HEVC, 60 fps, existing configurable bitrate), with the original TikTok audio handling (AAC stereo, 256 kbps; no added tempo filter). Instagram keeps normal speed and the existing 1080x1920 H.264 / 30 fps / AAC profile. Each export has its own progress, failure status and download; a failed export does not prevent its partner from running. The Both tab's clear buttons operate only on exports submitted through that tab. Platform tabs also show their respective outputs from combined uploads.
 
 Run `node --test test/*.test.js` for conversion and navigation checks.
+
+## Gym video editor branch
+
+Branch: `codex/gym-video-editor`. Start the local server and open
+`http://127.0.0.1:4173/editor`. The editor accepts a 4K source, creates an
+original-dimension, 60 fps edited master, then queues the existing TikTok,
+Instagram, or dual-platform converter profiles. Download the edited master or
+either platform export from its own queue card. Existing converter pages still
+accept simple uploads without going through the editor.
+
+1. Choose the original clip. Preview, pause, and drag a **blur area** over a
+   background face or a place where someone may appear. Set start and end times
+   for that rectangle, or leave the end blank to cover the whole clip. Use
+   multiple rectangles for moving people or different parts of the scene.
+2. **Detect and blur faces automatically** is enabled by default. Draw a
+   **Keep clear** rectangle around your own face to exclude it from detection.
+   The detector is OpenCV's bundled frontal-face cascade. It may miss small,
+   turned, occluded or fast-moving faces. Inspect the complete finished video
+   before sharing it, and add manual blur areas wherever needed. Manual blur
+   works even without Python.
+3. Optionally choose a voice recording and lower the **Original sound** slider.
+   Voice starts at the chosen second; picture in picture can be placed in any
+   corner with its own size and time range. Picture in picture audio is muted.
+4. Choose one platform or both, select **Auto**, **CPU**, **NVIDIA NVENC**, or
+   **AMD AMF**, and start the edit. Auto checks whether a real encode works on
+   this machine, prefers NVIDIA then AMD, and uses CPU when neither works.
+   The mask, blur, audio and overlay filters still run on the CPU; hardware
+   selection accelerates video encoding only. NVIDIA RTX 4070 Ti and 5070 or
+   AMD Radeon RX 9060 XT use their respective encoders when their driver and
+   FFmpeg build support them. The editor lists available choices locally.
+
+For automatic face detection on each machine, install Python 3 and run:
+
+```powershell
+python -m pip install -r requirements-editor.txt
+```
+
+If `python` is not on PATH, set `EDITOR_PYTHON` in `.env` to its full executable
+path. The existing `ffmpeg-static` build is used by default; you can set
+`FFMPEG_PATH` and `FFPROBE_PATH` in `.env` to matching builds with working NVIDIA
+or AMD encoders. The server stays bound to localhost. `MEDIA_ROOT` controls
+where uploaded sources, voice, picture in picture assets and exports are saved;
+set it to a drive with room for the 4K original plus the edited master and
+platform exports. Files remain there until you remove them deliberately.
+
+The TikTok converter now stretches audio with the default 2× timestamp scale,
+so added speech stays synchronized and keeps its pitch. Instagram remains normal
+speed. The mask composition uses FFmpeg's
+[masked video filters](https://ffmpeg.org/ffmpeg-filters.html) and OpenCV's
+[cascade face detector](https://docs.opencv.org/4.x/db/d28/tutorial_cascade_classifier.html).
