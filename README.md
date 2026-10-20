@@ -1,129 +1,94 @@
-# Local Video Converter
+# Gym Video Editor + Combined Converter
 
-This runs entirely on your Windows machine. Upload a video from the local
-dashboard, queue a local FFmpeg export, and download the finished MP4 directly
-to this machine. It has no Telegram bot integration and does not contact or
-modify any other installation.
+This Windows app edits local gym clips and exports them through one shared
+combined-converter workflow. It does not use Telegram, OpenClaw, or a cloud
+video service. The local dashboard is available only on `127.0.0.1`.
 
-## What the export does
+## Install on a Windows machine
 
-The profile now matches the supplied FFmpeg reference:
+1. Install Git, Node.js 20 or newer, and Python 3 if you want automatic face
+   detection. Make sure `git`, `node`, `npm`, and optionally `python` work in
+   PowerShell. Install a current NVIDIA or AMD driver if using GPU encoding.
+2. Clone **this branch** of the private repository and install its locked Node
+   dependencies:
 
-- `-itsscale 2`, making half-speed output; set `VIDEO_TIMESTAMP_SCALE=1` for
-  normal-speed delivery
-- `fps=60,unsharp=3:3:0.4:3:3:0.4`; no resizing or cropping is applied
-- HEVC/H.265 at 10 Mbps with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
-  `hvc1` tagging, fast-start metadata, and no embedded timecode track
-- AAC stereo audio at 256 kbps
+   ```powershell
+   git clone --branch codex/gym-video-editor --single-branch https://github.com/SaudAlkahtani/TiktokConverter.git
+   Set-Location TiktokConverter
+   npm ci
+   ```
 
-The exact `hevc_videotoolbox` encoder in the reference is macOS-only. This
-Windows installation uses FFmpeg's `libx265` encoder to create the equivalent
-HEVC/H.265 `hvc1` output. You can set `VIDEO_CODEC` in `.env` to an available
-Windows hardware encoder such as `hevc_nvenc`, `hevc_amf`, or `hevc_qsv`.
+   If the repository is already cloned, run `git fetch origin`, then
+   `git switch codex/gym-video-editor` if the branch exists locally, or
+   `git switch --track origin/codex/gym-video-editor` if it does not. Run
+   `git pull --ff-only` and `npm ci` after switching.
+3. Create the machine-local configuration file:
 
-## Source files accepted
+   ```powershell
+   Copy-Item .env.example .env
+   ```
 
-The local uploader accepts 1080p60, 2K, 3K, and 4K source video, plus any
-container/codecs that the bundled FFmpeg can decode. It validates the actual
-video stream after upload instead of relying solely on a filename extension.
+   Edit `.env` if you want `MEDIA_ROOT` on a larger drive, for example
+   `MEDIA_ROOT=D:\GymVideoConverter`. Ensure that drive exists and has space
+   for the original, edited master, and both exports. The default media
+   location is the project folder. `.env` and video files are not committed.
+4. For automatic face detection, install its Python dependencies:
 
-It is a transparent, high-quality profile inspired by the goal of a “60fps
-mode”; it does not copy or claim to be Decoy’s proprietary preset. TikTok can
-still transcode every upload, so a perfect byte-for-byte preservation guarantee
-is not possible.
+   ```powershell
+   python -m pip install -r requirements-editor.txt
+   ```
 
-## Install
+   If Python is not on `PATH`, set `EDITOR_PYTHON` in `.env` to its executable.
+   Manual blur rectangles work without Python.
+5. Start the server with `npm start` or double-click
+   `Start-Local-Converter.cmd`. Open
+   [http://127.0.0.1:4173/editor](http://127.0.0.1:4173/editor). Keep the
+   command window open while processing. Run `npm run doctor` to check local
+   FFmpeg and encoder capabilities. The project includes bundled FFmpeg and
+   FFprobe; for a different build, set `FFMPEG_PATH` and `FFPROBE_PATH` in
+   `.env` to matching executables. Available GPU encoders depend on the
+   machine, its drivers, and its FFmpeg build; Auto falls back to CPU.
 
-1. This machine uses a portable Node.js runtime in `tools\node` (kept out of
-   Git). On another machine, install a current Node.js LTS and run `npm ci`.
-2. Copy `.env.example` to `.env` only if you want to customize the port,
-   FFmpeg paths, output quality, or upload limit.
-3. Double-click `Start-Local-Converter.cmd`, then open `http://127.0.0.1:4173`.
-4. Choose a video, click **Upload & convert**, and use **Download export** when
-   the job completes.
+## Edit and export
 
-## Move to another Windows machine
+Choose a source video, including 4K clips. Draw timed blur regions over
+background faces, or enable automatic face detection and mark **Keep clear**
+over your own face. Check every finished frame: automatic detection can miss
+small, turned, or moving faces. Optionally add voice audio, lower the original
+sound, and add a timed picture-in-picture clip (its sound is muted). Select
+Auto, CPU, NVIDIA NVENC, or AMD AMF, then start the edit.
 
-Clone the private repository, install dependencies, then configure the secret
-files locally (they are intentionally never stored in GitHub):
+The editor first makes a downloadable, source-dimension 60 fps master. It then
+passes that master to the **same combined converter used by `/both`**, which
+creates two separately downloadable MP4 files:
 
-```powershell
-git clone https://github.com/SaudAlkahtani/TiktokConverter.git
-cd TiktokConverter
-npm ci
-Copy-Item .env.example .env
-```
+| Export | Video | Timing | Audio |
+| --- | --- | --- | --- |
+| TikTok | HEVC/H.265, source dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` (twice the source duration) | AAC stereo 256 kbps; audio slowed to match while preserving pitch |
+| Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 60 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
 
-Set `MEDIA_ROOT` in `.env` to keep incoming and exported media on another
-drive. The server binds to `127.0.0.1`, so it is accessible only from this
-machine. Files stay in `incoming/` and `output/` until you delete them.
+Instagram preserves the full picture with aspect-aware padding rather than
+cropping. Its 2-second GOP uses 120 frames at 60 fps. HDR PQ/HLG sources are
+tone-mapped to SDR. TikTok sharpens moderately by default and does not resize;
+change `VIDEO_SHARPEN` or `VIDEO_BITRATE` in `.env` if needed. The standalone
+`/instagram` page uses the same 60 fps Instagram profile. The standalone
+`/tiktok` page uses `VIDEO_TIMESTAMP_SCALE` (default 2); the combined workflow
+always specifies scale 2 explicitly.
 
-## Instagram converter
+Both exports are local preparation files. TikTok and Instagram can recompress
+uploads, so no encoder can guarantee identical quality after publishing. Meta's
+[Reels publishing sample](https://github.com/fbsamples/reels_publishing_apis/blob/main/insta_reels_publishing_api_sample/README.md#reels-requirements-for-publishing)
+lists 23–60 fps, H.264/HEVC, AAC, and a 9:16 recommendation. The app does not
+enforce platform publishing duration or file-size limits.
 
-Branch: `combined-tiktok-insta-converters`. Both converter pages use the same shared dark theme with gradient accents. Start the server with `Start-Local-Converter.cmd` or `npm start`.
-- TikTok: http://127.0.0.1:4173/tiktok (also the home page).
-- Instagram: http://127.0.0.1:4173/instagram.
+Open `/both` to run the combined converter on an unedited source. `/tiktok`
+and `/instagram` are also available for individual conversions. All routes
+share one FIFO processing worker. Inputs and outputs remain on disk until you
+remove them; clearing queue cards does not delete the files. No upload is sent
+to a social network.
 
-Both pages have platform buttons. Jobs share one FIFO worker, with separate page views and platform-scoped clear buttons. Existing API clients default to TikTok; send `POST /api/uploads?platform=instagram` for Reels.
-
-Instagram uses normal playback, 1080x1920 with aspect-preserving padding, constant 30 fps, H.264 High / yuv420p, CRF 18 with a 12 Mbps ceiling, closed 2-second GOP, AAC 128 kbps / 48 kHz stereo when audio exists, fast-start MP4 without edit lists. HDR PQ/HLG sources are tone mapped to SDR. No sharpening or container patch is applied. Smaller sources are enlarged to the target canvas. Enable Instagram's highest-quality upload setting; Instagram will recompress the result.
-
-These are practical export defaults, not a guarantee of upload quality. Meta's sample specifies H.264/HEVC, 23–60 fps, VBR up to 25 Mbps, AAC, and recommends 9:16:
-https://github.com/fbsamples/reels_publishing_apis/blob/main/insta_reels_publishing_api_sample/README.md#reels-requirements-for-publishing
-The converter does not trim clips or enforce Instagram publishing duration/file-size limits.
-
-## Both platforms tab
-
-Open `/both` to upload each source once and queue two independent exports. TikTok explicitly uses timestamp scale 2 (HEVC, 60 fps, existing configurable bitrate), with the original TikTok audio handling (AAC stereo, 256 kbps; no added tempo filter). Instagram keeps normal speed and the existing 1080x1920 H.264 / 30 fps / AAC profile. Each export has its own progress, failure status and download; a failed export does not prevent its partner from running. The Both tab's clear buttons operate only on exports submitted through that tab. Platform tabs also show their respective outputs from combined uploads.
-
-Run `node --test test/*.test.js` for conversion and navigation checks.
-
-## Gym video editor branch
-
-Branch: `codex/gym-video-editor`. Start the local server and open
-`http://127.0.0.1:4173/editor`. The editor accepts a 4K source, creates an
-original-dimension, 60 fps edited master, then queues the existing TikTok,
-Instagram, or dual-platform converter profiles. Download the edited master or
-either platform export from its own queue card. Existing converter pages still
-accept simple uploads without going through the editor.
-
-1. Choose the original clip. Preview, pause, and drag a **blur area** over a
-   background face or a place where someone may appear. Set start and end times
-   for that rectangle, or leave the end blank to cover the whole clip. Use
-   multiple rectangles for moving people or different parts of the scene.
-2. **Detect and blur faces automatically** is enabled by default. Draw a
-   **Keep clear** rectangle around your own face to exclude it from detection.
-   The detector is OpenCV's bundled frontal-face cascade. It may miss small,
-   turned, occluded or fast-moving faces. Inspect the complete finished video
-   before sharing it, and add manual blur areas wherever needed. Manual blur
-   works even without Python.
-3. Optionally choose a voice recording and lower the **Original sound** slider.
-   Voice starts at the chosen second; picture in picture can be placed in any
-   corner with its own size and time range. Picture in picture audio is muted.
-4. Choose one platform or both, select **Auto**, **CPU**, **NVIDIA NVENC**, or
-   **AMD AMF**, and start the edit. Auto checks whether a real encode works on
-   this machine, prefers NVIDIA then AMD, and uses CPU when neither works.
-   The mask, blur, audio and overlay filters still run on the CPU; hardware
-   selection accelerates video encoding only. NVIDIA RTX 4070 Ti and 5070 or
-   AMD Radeon RX 9060 XT use their respective encoders when their driver and
-   FFmpeg build support them. The editor lists available choices locally.
-
-For automatic face detection on each machine, install Python 3 and run:
+## Verify changes
 
 ```powershell
-python -m pip install -r requirements-editor.txt
+node --test test/*.test.js
 ```
-
-If `python` is not on PATH, set `EDITOR_PYTHON` in `.env` to its full executable
-path. The existing `ffmpeg-static` build is used by default; you can set
-`FFMPEG_PATH` and `FFPROBE_PATH` in `.env` to matching builds with working NVIDIA
-or AMD encoders. The server stays bound to localhost. `MEDIA_ROOT` controls
-where uploaded sources, voice, picture in picture assets and exports are saved;
-set it to a drive with room for the 4K original plus the edited master and
-platform exports. Files remain there until you remove them deliberately.
-
-The TikTok converter now stretches audio with the default 2× timestamp scale,
-so added speech stays synchronized and keeps its pitch. Instagram remains normal
-speed. The mask composition uses FFmpeg's
-[masked video filters](https://ffmpeg.org/ffmpeg-filters.html) and OpenCV's
-[cascade face detector](https://docs.opencv.org/4.x/db/d28/tutorial_cascade_classifier.html).

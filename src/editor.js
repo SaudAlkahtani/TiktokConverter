@@ -46,7 +46,7 @@ export function validateEditSettings(raw, duration) {
   const pipPosition = raw.pipPosition || 'bottom-right';
   if (!['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(pipPosition)) throw new Error('Invalid picture in picture corner.');
   const destination = raw.destination || 'both';
-  if (!['tiktok', 'instagram', 'both'].includes(destination)) throw new Error('Choose a destination.');
+  if (destination !== 'both') throw new Error('The editor exports to TikTok and Instagram together.');
   const encoder = raw.encoder || 'auto';
   if (!['auto', 'cpu', 'nvidia', 'amd'].includes(encoder)) throw new Error('Choose an encoding method.');
   return {

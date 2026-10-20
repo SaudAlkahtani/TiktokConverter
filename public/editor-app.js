@@ -135,7 +135,7 @@ $('#editor-submit').addEventListener('click', async () => {
     originalVolume: number('#original-volume') / 100,
     pipStart: number('#pip-start'), pipEnd: $('#pip-end').value ? number('#pip-end') : state.duration,
     pipWidth: number('#pip-size') / 100, pipPosition: $('#pip-position').value,
-    destination: $('#editor-destination').value, encoder: $('#editor-encoder').value
+    destination: 'both', encoder: $('#editor-encoder').value
   };
   const form = new FormData(); form.append('source', source.files[0]);
   if (voice.files[0]) form.append('voice', voice.files[0]);

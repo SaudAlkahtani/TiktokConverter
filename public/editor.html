@@ -45,7 +45,7 @@
           <p class="editor-small">Overlay sound is muted. Your original sound and voice settings control the mix.</p>
         </section>
         <section class="editor-panel editor-export-panel"><span class="eyebrow">05 / EXPORT</span><h2>Finish in the converter</h2>
-          <label class="editor-field">Platform<select id="editor-destination"><option value="both">TikTok + Instagram</option><option value="tiktok">TikTok only</option><option value="instagram">Instagram only</option></select></label>
+          <p class="editor-small">Every edit creates a 60 fps master, then two combined-converter exports: TikTok HEVC at timestamp scale 2 and Instagram H.264 at 1080 × 1920 / 60 fps.</p>
           <label class="editor-field">Encoder<select id="editor-encoder"><option value="auto">Auto · best available GPU, then CPU</option><option value="cpu">CPU · works everywhere</option><option value="nvidia">NVIDIA NVENC</option><option value="amd">AMD AMF</option></select></label>
           <div class="editor-small" id="encoder-status">Checking hardware encoders…</div>
           <button id="editor-submit" type="button" class="editor-primary">Upload and edit video</button><p id="editor-message" class="upload-status" role="status" aria-live="polite"></p>
@@ -53,7 +53,7 @@
       </div>
     </section>
     <section class="jobs-section editor-jobs"><div class="section-heading"><div><p class="eyebrow">LOCAL PROCESSING</p><h2>Edit and exports</h2></div><span class="live"><i></i> LIVE</span></div><div id="editor-empty" class="empty">Your edit and platform exports will appear here.</div><div id="editor-job-list" class="jobs"></div></section>
-    <aside class="note">The edited master keeps the source dimensions at 60 fps. Exports use the existing platform presets. Source files, voice clips, overlay clips, and outputs stay on this machine.</aside>
+    <aside class="note">The edited master keeps the source dimensions at 60 fps. The combined converter produces both platform exports. Source files, voice clips, overlay clips, and outputs stay on this machine.</aside>
   </main>
   <script type="module" src="/editor-app.js"></script>
 </body>

@@ -15,6 +15,12 @@ export class JobQueue extends EventEmitter {
     // Append so the oldest waiting upload always starts next (FIFO).
     this.jobs.push(job); this.emitUpdate(); this.pump(); return job;
   }
+  addCombined({ sourcePath, sourceName, bytes, origin = 'both', groupId = randomUUID(), encoder = 'cpu' }) {
+    return [
+      this.add({ sourcePath, sourceName, bytes, platform: 'tiktok', origin, groupId, timestampScale: 2, encoder }),
+      this.add({ sourcePath, sourceName, bytes, platform: 'instagram', origin, groupId, encoder })
+    ];
+  }
   addEditor({ sourcePath, sourceName, bytes, voicePath, pipPath, settings }) {
     const job = { id: randomUUID(), sourcePath, sourceName, bytes, platform: 'editor', origin: 'editor', status: 'queued', progress: 0,
       createdAt: new Date().toISOString(), outputPath: null, editSummary: { destination: settings.destination, encoder: settings.encoder,
@@ -57,10 +63,8 @@ export class JobQueue extends EventEmitter {
       job.outputPath = outputPath; job.progress = 100; job.status = "complete"; job.completedAt = new Date().toISOString(); this.emitUpdate();
       this.emit("complete", job);
       if (job.platform === 'editor' && !job.cancelled) {
-        const destinations = job.editor.settings.destination === 'both' ? ['tiktok', 'instagram'] : [job.editor.settings.destination];
-        for (const platform of destinations) this.add({ sourcePath: outputPath, sourceName: job.sourceName, bytes: job.media.bytes,
-          platform, origin: 'editor', groupId: job.id, encoder: job.editor.settings.encoder,
-          timestampScale: platform === 'tiktok' ? 2 : undefined });
+        this.addCombined({ sourcePath: outputPath, sourceName: job.sourceName, bytes: job.media.bytes,
+          origin: 'editor', groupId: job.id, encoder: job.editor.settings.encoder });
       }
     } catch (error) {
       if (!job.cancelled && !(error instanceof RenderCancelledError)) {

@@ -20,6 +20,7 @@ test('editor validates privacy areas, destination and GPU choices', () => {
   assert.throws(() => validateEditSettings({ blurRegions: [], encoder: 'shell' }, 2), /encoding/);
   assert.throws(() => validateEditSettings({ blurRegions: [], pipEnd: 3 }, 2), /end/i);
   assert.equal(validateEditSettings({ blurRegions: [], destination: 'both' }, 2).destination, 'both');
+  assert.throws(() => validateEditSettings({ blurRegions: [], destination: 'instagram' }, 2), /together/);
 });
 
 test('edit mixes voice, reduces source sound, blurs a region and overlays video before platform export', async () => {
@@ -32,7 +33,7 @@ test('edit mixes voice, reduces source sound, blurs a region and overlays video 
     ffmpeg(['-f','lavfi','-i','color=c=red:s=80x80:r=30:duration=1','-c:v','libx264','-preset','ultrafast',pip]);
     const media = await probe(input);
     const settings = validateEditSettings({ blurRegions:[{x:.5,y:.05,w:.35,h:.22,start:0,end:1}], originalVolume:.2, voiceVolume:1,
-      voiceStart:0, pipStart:0, pipEnd:1, pipWidth:.32, destination:'instagram',encoder:'cpu' }, media.duration);
+      voiceStart:0, pipStart:0, pipEnd:1, pipWidth:.32, destination:'both',encoder:'cpu' }, media.duration);
     const args = buildEditArgs({ input, output:master, voicePath:voice, pipPath:pip, media, settings, videoEncoder:'libx265' });
     assert.match(args[args.indexOf('-filter_complex')+1], /alphamerge/);
     assert.match(args[args.indexOf('-filter_complex')+1], /amix=inputs=2/);
@@ -51,7 +52,8 @@ test('edit mixes voice, reduces source sound, blurs a region and overlays video 
     const complete = new Promise((resolve,reject)=>{queue.on('complete',job=>{if(job.platform==='instagram')resolve(job);});queue.on('failed',job=>reject(new Error(job.error)));});
     queue.addEditor({sourcePath:input,sourceName:'gym.mp4',bytes:100,voicePath:voice,pipPath:pip,settings});
     const instagram = await complete;
-    assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);
+    assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'60/1');
+    assert.ok(queue.jobs.some(job=>job.platform==='tiktok'&&job.status==='complete'&&job.timestampScale===2));
     assert.ok(queue.jobs.some(job=>job.platform==='editor'&&job.status==='complete'));
     assert.ok(queue.snapshot().every(job=>!('editor' in job)&&!('sourcePath' in job)));
   } finally { config.directories.output = priorOutput; await fs.rm(folder,{recursive:true,force:true}); }
@@ -112,6 +114,11 @@ test('local editor upload queues a 60 fps master and two finished platform expor
     assert.deepEqual(jobs.map(job => job.platform).sort(), ['editor','instagram','tiktok']);
     assert.ok(jobs.every(job => job.downloadable));
     const tiktok = jobs.find(job => job.platform === 'tiktok');
+    const instagram = jobs.find(job => job.platform === 'instagram');
+    assert.equal(tiktok.timestampScale,2);
+    assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'60/1');
+    assert.equal(tiktok.groupId,jobs.find(job => job.platform === 'editor').id);
+    assert.equal(instagram.groupId,tiktok.groupId);
     const audioProbe = spawnSync(config.ffprobe, ['-v','error','-select_streams','a:0','-show_entries','stream=duration','-of','default=noprint_wrappers=1:nokey=1',
       path.join(folder,'output',tiktok.media.output)], { encoding:'utf8', windowsHide:true });
     assert.equal(audioProbe.status,0,audioProbe.stderr);

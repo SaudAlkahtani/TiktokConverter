@@ -89,10 +89,9 @@ app.post("/api/uploads", async (request, reply) => {
         const stat = await fs.stat(target);
         const source = await probe(target);
         const groupId = randomUUID();
-        const outputs = (platform === 'both' ? ['tiktok', 'instagram'] : [platform]).map(outputPlatform => queue.add({
-          sourcePath: target, sourceName, bytes: stat.size, platform: outputPlatform,
-          origin: platform, groupId, timestampScale: platform === 'both' && outputPlatform === 'tiktok' ? 2 : undefined
-        }));
+        const outputs = platform === 'both'
+          ? queue.addCombined({ sourcePath: target, sourceName, bytes: stat.size, groupId })
+          : [queue.add({ sourcePath: target, sourceName, bytes: stat.size, platform, groupId })];
         accepted.push({ id: outputs[0].id, sourceName, bytes: stat.size, source, outputs: outputs.map(job => ({ id: job.id, platform: job.platform })) });
       } catch (error) {
         if (target) await fs.rm(target, { force: true });
