@@ -1,0 +1,35 @@
+name: Locked TikTok preset
+
+on:
+  push:
+    branches:
+      - main
+      - main-telegram-version
+      - working-local-version
+      - main-local-version
+      - official-local-version
+      - combined-tiktok-insta-converters
+      - codex/gym-video-editor
+      - codex/editor-kdenlive-workflow
+  pull_request:
+    branches:
+      - main
+      - main-telegram-version
+      - working-local-version
+      - main-local-version
+      - official-local-version
+      - combined-tiktok-insta-converters
+      - codex/gym-video-editor
+      - codex/editor-kdenlive-workflow
+
+jobs:
+  check-preset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: node --test test/tiktok-preset.test.js
