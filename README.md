@@ -36,7 +36,7 @@ is not possible.
 1. This machine uses a portable Node.js runtime in `tools\node` (kept out of
    Git). On another machine, install a current Node.js LTS and run `npm ci`.
 2. Copy `.env.example` to `.env` only if you want to customize the port,
-   FFmpeg paths, output quality, or upload limit.
+   FFmpeg paths, media location, or upload limit. The TikTok preset is fixed.
 3. Double-click `Start-Local-Converter.cmd`, then open `http://127.0.0.1:4173`.
 4. Choose a video, click **Upload & convert**, and use **Download export** when
    the job completes.
@@ -59,7 +59,7 @@ machine. Files stay in `incoming/` and `output/` until you delete them.
 
 ## Instagram converter
 
-Branch: `combined-tiktok-insta-converters`. Both converter pages use the same shared dark theme with gradient accents. Start the server with `Start-Local-Converter.cmd` or `npm start`.
+Branch: `release/combined-converter`. Both converter pages use the same shared dark theme with gradient accents. Start the server with `Start-Local-Converter.cmd` or `npm start`.
 - TikTok: http://127.0.0.1:4173/tiktok (also the home page).
 - Instagram: http://127.0.0.1:4173/instagram.
 
