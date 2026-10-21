@@ -3,24 +3,16 @@ name: Locked TikTok preset
 on:
   push:
     branches:
-      - main
-      - main-telegram-version
-      - working-local-version
-      - main-local-version
-      - official-local-version
-      - combined-tiktok-insta-converters
-      - codex/gym-video-editor
-      - codex/editor-kdenlive-workflow
+      - release/editor-studio
+      - release/combined-converter
+      - release/telegram-publisher
+      - release/local-uploader
   pull_request:
     branches:
-      - main
-      - main-telegram-version
-      - working-local-version
-      - main-local-version
-      - official-local-version
-      - combined-tiktok-insta-converters
-      - codex/gym-video-editor
-      - codex/editor-kdenlive-workflow
+      - release/editor-studio
+      - release/combined-converter
+      - release/telegram-publisher
+      - release/local-uploader
 
 jobs:
   check-preset:
