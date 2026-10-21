@@ -3,6 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bundledFfmpeg from "ffmpeg-static";
 import bundledFfprobe from "ffprobe-static";
+import { TIKTOK_PRESET, assertTikTokPresetEnvironment } from './tiktok-preset.js';
+
+assertTikTokPresetEnvironment();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mediaRoot = path.resolve((process.env.MEDIA_ROOT || root).trim());
@@ -19,7 +22,7 @@ export const config = {
   maxInputBytes: gigabytes * 1024 ** 3,
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
   maxUploadFiles: uploadFiles,
-  inputTimestampScale: Number(process.env.VIDEO_TIMESTAMP_SCALE || 2),
+  inputTimestampScale: TIKTOK_PRESET.timestampScale,
   tiktok: {
     accountName: 'Saud fitness journey',
     handle: (process.env.TIKTOK_HANDLE || 'sauds.journey').replace(/^@/, '').trim(),
@@ -36,12 +39,11 @@ export const config = {
   allowedChatIds: new Set((process.env.TELEGRAM_ALLOWED_CHAT_IDS || "").split(",").map((id) => id.trim()).filter(Boolean)),
   cleanupSourceAfterSend: process.env.DELETE_SOURCE_AFTER_SEND !== "false",
   export: {
-    videoCodec: process.env.VIDEO_CODEC || "libx265",
-    // Copy only Khaled's resolution-dependent rate limits, not its codec/patch.
-    bitrate: "18M / 28M / 45M by resolution",
-    audioBitrate: "192k",
-    gop: Math.max(1, Number(process.env.VIDEO_GOP || 60)),
-    sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
+    videoCodec: TIKTOK_PRESET.videoCodec,
+    bitrate: TIKTOK_PRESET.bitrate,
+    audioBitrate: TIKTOK_PRESET.audioBitrate,
+    gop: TIKTOK_PRESET.gop,
+    sharpen: TIKTOK_PRESET.sharpen
   },
   directories: {
     incoming: path.join(mediaRoot, "incoming"),
@@ -54,7 +56,5 @@ export const config = {
 export const isLocalBotApi = new URL(config.telegramApiRoot).hostname !== "api.telegram.org";
 
 export function bitrateFor(media) {
-  const shortEdge = Math.min(media.width, media.height);
-  const mbps = shortEdge <= 1080 ? 18 : shortEdge <= 1440 ? 28 : 45;
-  return { bitrate: `${mbps}M`, maxrate: `${mbps}M`, bufsize: `${mbps * 2}M` };
+  return { bitrate: TIKTOK_PRESET.bitrate };
 }

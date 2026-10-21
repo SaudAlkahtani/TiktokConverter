@@ -8,23 +8,20 @@ your Windows computer; the dashboard listens only on `127.0.0.1:4173`.
 ## Shared export profile
 
 - Original dimensions, with no resize or crop; constant 60fps and half-speed
-  playback by default (`-itsscale 2`). Audio is stretched with preserved pitch.
+  playback (`-itsscale 2`). Source audio timestamps are scaled too.
 - Native HEVC/H.265 MP4 (`libx265`, `hvc1`, fast start), not Khaled's H.264 codec.
 - Existing reference sharpening: `unsharp=3:3:0.4:3:3:0.4`.
-- Khaled's resolution-dependent video rate limits, used here as HEVC **targets
-  and caps**: 18 Mbps for a shorter edge up to 1080; 28 Mbps up to 1440;
-  45 Mbps above 1440, including 3K and 4K. Buffer size is twice the video rate.
-- AAC 192 kbps stereo, 48 kHz; 60-frame GOP, Rec.709 metadata, 8-bit 4:2:0.
-- Only bitrate settings were borrowed. No ghost-sample MP4 patch, CRF 17,
-  Khaled frame manipulation, or automatic resolution changes.
+- Fixed 20 Mbps HEVC target; no resolution-dependent rate caps.
+- AAC 256 kbps stereo, 48 kHz; 60-frame GOP, Rec.709 metadata, 8-bit 4:2:0.
+- The TikTok command is locked to commit `6378e68`. Conflicting environment
+  overrides are rejected and finished files are verified with ffprobe.
 
-These are encoder rate-control settings, not a guaranteed measured bitrate:
-simple footage can use less. Khaled uses them as ceilings with CRF; this local
-version retains its bitrate-targeted encoding method. Its above-60fps rate
-multiplier is not used because this version always outputs 60fps.
+The 20 Mbps setting is an encoder target, not a guaranteed measured bitrate:
+simple footage can use less. No ghost-sample MP4 patch or Khaled frame
+manipulation is applied.
 
-Legacy `VIDEO_BITRATE`, `VIDEO_MAXRATE` and `VIDEO_BUFSIZE` settings are ignored.
-`VIDEO_TIMESTAMP_SCALE=2` is the default; set it to `1` for normal speed.
+TikTok video settings in `.env` must match the locked profile. Legacy
+`VIDEO_MAXRATE` and `VIDEO_BUFSIZE` settings are ignored.
 This latest pre-Khaled build does not include the separate GPU-selection branch.
 Its existing SDR/8-bit filter is retained: grade/tone-map HDR or log masters to
 SDR Rec.709 in your editor before upload. HEVC 4:2:0 needs even dimensions.

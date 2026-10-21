@@ -166,8 +166,8 @@ export async function startTelegram(queue, { settings = config, bot, poll = true
     if (!ctx.chat || (settings.allowedChatIds.size && !settings.allowedChatIds.has(String(ctx.chat.id)))) return ctx.reply("This bot is not authorized for this chat.");
     await next();
   });
-  bot.command("start", (ctx) => ctx.reply(`Send your original video as a File, then choose Return video only or Upload to TikTok @${settings.tiktok.handle}. Same local profile: original dimensions, 60fps, ${settings.inputTimestampScale === 2 ? 'half speed with matched audio' : 'normal speed'}, HEVC MP4, 18/28/45 Mbps, AAC 192k. Only the TikTok choice asks for a description. Use /myid and /tiktok for setup/status. Publishing requires account verification and explicit confirmation.`));
-  bot.command("profile", (ctx) => ctx.reply(`Same as local uploads: original dimensions • 60fps • -itsscale ${settings.inputTimestampScale} • HEVC/hvc1 • 18/28/45M • AAC 192k stereo with matched timing • no Khaled MP4 patch.`));
+  bot.command("start", (ctx) => ctx.reply(`Send your original video as a File, then choose Return video only or Upload to TikTok @${settings.tiktok.handle}. Same locked local profile: original dimensions, 60fps, half-speed timestamps, HEVC MP4, 20 Mbps target, AAC 256k. Only the TikTok choice asks for a description. Use /myid and /tiktok for setup/status. Publishing requires account verification and explicit confirmation.`));
+  bot.command("profile", (ctx) => ctx.reply(`Same as local uploads: original dimensions • 60fps • -itsscale 2 • HEVC/hvc1 • 20M • AAC 256k stereo • locked to commit 6378e68.`));
   let askForCaption = async()=>{};
   if(!tiktokDrafts)bot.command('myid',(ctx)=>ctx.reply(`Telegram user ID: ${ctx.from?.id}\nChat ID: ${ctx.chat?.id}`));
   bot.command("status", (ctx) => {

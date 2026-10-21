@@ -3,6 +3,7 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config, bitrateFor } from "./config.js";
+import { buildTikTokArgs, TIKTOK_PRESET } from './tiktok-preset.js';
 
 const run = async (command, args) => {
   const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -29,7 +30,7 @@ export async function probe(input) {
   return { duration: Number(video.duration || info.format?.duration || 0),
     width: swapped ? video.height : video.width, height: swapped ? video.width : video.height,
     fps: video.avg_frame_rate !== "0/0" ? video.avg_frame_rate : video.r_frame_rate,
-    codec: video.codec_name, audio: audio ? { codec: audio.codec_name, channels: audio.channels, duration: Number(audio.duration || info.format?.duration || 0) } : null };
+    codec: video.codec_name, pixelFormat: video.pix_fmt, videoTag: video.codec_tag_string, colorSpace: video.color_space, colorPrimaries: video.color_primaries, colorTransfer: video.color_transfer, audio: audio ? { codec: audio.codec_name, channels: audio.channels, sampleRate: audio.sample_rate, duration: Number(audio.duration || info.format?.duration || 0) } : null };
 }
 
 export class RenderCancelledError extends Error {
@@ -44,33 +45,14 @@ const throwIfAborted = (signal) => {
 };
 
 export function buildRenderArgs(media, input, output) {
-  if (![1, 2].includes(config.inputTimestampScale)) throw new Error('VIDEO_TIMESTAMP_SCALE must be 1 or 2.');
-  const filters = [
-    'setpts=PTS-STARTPTS',
-    "fps=60",
-    ...(config.inputTimestampScale === 2 ? ['tpad=stop_mode=clone:stop_duration=0.034'] : []),
-    config.export.sharpen
-  ].filter(Boolean).join(",");
-  const rates = bitrateFor(media);
-  return [
-    "-hide_banner", "-y", "-itsscale", String(config.inputTimestampScale), "-i", input,
-    "-map", "0:v:0", "-map", "0:a?",
-    "-vf", filters,
-    "-c:v", config.export.videoCodec, "-b:v", rates.bitrate, "-maxrate", rates.maxrate, "-bufsize", rates.bufsize, "-g", String(config.export.gop),
-    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-    "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0", "-pix_fmt", "yuv420p",
-    '-af', `asetpts=N/SR/TB,atempo=${1 / config.inputTimestampScale}`,
-    "-c:a", "aac", "-b:a", config.export.audioBitrate, "-ar", "48000", "-ac", "2",
-    '-t', String(media.duration * config.inputTimestampScale),
-    "-progress", "pipe:1", "-nostats", output
-  ];
+  return buildTikTokArgs(input, output);
 }
 
 export async function render({ input, output, onProgress = () => {}, signal }) {
   throwIfAborted(signal);
   const media = await probe(input);
   throwIfAborted(signal);
-  const expectedDuration = media.duration * config.inputTimestampScale;
+  const expectedDuration = media.duration * TIKTOK_PRESET.timestampScale;
   const args = buildRenderArgs(media, input, output);
   const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const stop = () => child.kill();
@@ -93,8 +75,8 @@ export async function render({ input, output, onProgress = () => {}, signal }) {
     if (code !== 0) throw new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-1800)}`);
     const result = await probe(output);
     const [fpsN, fpsD = 1] = result.fps.split("/").map(Number);
-    if (result.width !== media.width || result.height !== media.height || Math.abs(fpsN / fpsD - 60) > 0.01 || Math.abs(result.duration - expectedDuration) > Math.max(0.1, expectedDuration * 0.005)) {
-      throw new Error("Output did not retain the source dimensions, expected duration, or 60fps.");
+    if (result.width !== media.width || result.height !== media.height || Math.abs(fpsN / fpsD - 60) > 0.01 || Math.abs(result.duration - expectedDuration) > Math.max(0.1, expectedDuration * 0.005) || result.codec !== 'hevc' || result.pixelFormat !== 'yuv420p' || result.videoTag !== 'hvc1' || result.colorSpace !== 'bt709' || result.colorPrimaries !== 'bt709' || result.colorTransfer !== 'bt709' || (media.audio && (result.audio?.codec !== 'aac' || result.audio?.channels !== 2 || result.audio?.sampleRate !== '48000'))) {
+      throw new Error("TikTok export did not match the locked commit 6378e68 profile.");
     }
     const stat = await fs.stat(output);
     return { ...result, timestampScale: config.inputTimestampScale, source: media, ...bitrateFor(media), bytes: stat.size, output: path.basename(output) };
