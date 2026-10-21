@@ -63,7 +63,7 @@
       <details class="editor-shortcuts"><summary>Keyboard shortcuts</summary><div><span><kbd>Shift+R</kbd> Split at playhead</span><span><kbd>Shift+G</kbd> Unlink selected pair</span><span><kbd>Shift+L</kbd> Link selected pair</span><span><kbd>Delete</kbd> Delete selected track or linked pair</span><span><kbd>Ctrl+Z</kbd> Revert last timeline edit</span><span><kbd>Ctrl+Shift+Z</kbd> Redo</span><span><kbd>← / →</kbd> Step one frame</span><span><kbd>Space</kbd> Play / pause</span></div></details>
     </section>
     <section class="jobs-section editor-jobs"><div class="section-heading"><div><p class="eyebrow">LOCAL PROCESSING</p><h2>Edit and exports</h2></div><span class="live"><i></i> LIVE</span></div><div id="editor-empty" class="empty">Your edit and platform exports will appear here.</div><div id="editor-job-list" class="jobs"></div></section>
-    <aside class="note">The edited master uses the first timeline clip's dimensions at 60 fps; other sources are padded to fit. Its audio and the Instagram export keep normal timing. The TikTok export scales video timing only, so its original-speed audio ends at the edited master's duration. All files stay on this machine.</aside>
+    <aside class="note">The edited master uses the first timeline clip's dimensions at 60 fps; other sources are padded to fit. The master and Instagram export keep normal audio timing. The locked TikTok method scales the entire edited input, including audio, to a 2× timeline and always uses CPU libx265. All files stay on this machine.</aside>
   </main>
   <script type="module" src="/editor-app.js"></script>
 </body>

@@ -95,21 +95,24 @@ creates two separately downloadable MP4 files:
 
 | Export | Video | Timing | Audio |
 | --- | --- | --- | --- |
-| TikTok | HEVC/H.265, master dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` for video (twice the merged duration) | Original-speed audio, AAC stereo 256 kbps; ends at the source duration |
+| TikTok | HEVC/H.265, master dimensions, constant 60 fps, locked 20 Mbps target, Rec.709, `hvc1` | `-itsscale 2` on the input (twice the merged duration) | AAC stereo 256 kbps on the same scaled timeline |
 | Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 30 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
 
-This audio behavior is the same on every tab: standalone TikTok, Both, and the
-editor's TikTok export scale only video timestamps. Standalone Instagram, Both,
-and the editor's Instagram export keep video and audio at normal timing. The
-edited master keeps its timeline audio at normal speed before either export.
+Standalone TikTok, Both, and the editor's TikTok export all use the exact
+conversion arguments from commit `6378e68`: one input with timestamp scale 2
+applied before mapping video and audio. The edited master keeps normal-speed
+timeline audio before that final TikTok export. Standalone Instagram, Both,
+and the editor's Instagram export retain their distinct 30 fps preset and
+normal timing. The editor's encoder choice applies to the master and Instagram,
+not the locked CPU/libx265 TikTok export.
 
 Instagram preserves the full picture with aspect-aware padding rather than
 cropping. Its 2-second GOP uses 60 frames at 30 fps. HDR PQ/HLG sources are
-tone-mapped to SDR. TikTok sharpens moderately by default and does not resize;
-change `VIDEO_SHARPEN` or `VIDEO_BITRATE` in `.env` if needed. The standalone
-`/instagram` page uses the same 30 fps Instagram profile. The standalone
-`/tiktok` page uses `VIDEO_TIMESTAMP_SCALE` (default 2); the combined workflow
-always specifies scale 2 explicitly.
+tone-mapped to SDR. TikTok uses the locked unsharp filter and does not resize.
+`VIDEO_CODEC`, `VIDEO_BITRATE`, `VIDEO_GOP`, `VIDEO_SHARPEN`, and
+`VIDEO_TIMESTAMP_SCALE` may be omitted or set to the reference values in
+`.env`; conflicting values stop the app rather than silently change the method.
+The standalone `/instagram` page uses the same 30 fps Instagram profile.
 
 Both exports are local preparation files. TikTok and Instagram can recompress
 uploads, so no encoder can guarantee identical quality after publishing. Meta's

@@ -263,7 +263,6 @@ test('local editor upload queues a 60 fps master and two finished platform expor
     const audioProbe = spawnSync(config.ffprobe, ['-v','error','-select_streams','a:0','-show_entries','stream=duration','-of','default=noprint_wrappers=1:nokey=1',
       path.join(folder,'output',tiktok.media.output)], { encoding:'utf8', windowsHide:true });
     assert.equal(audioProbe.status,0,audioProbe.stderr);
-    const masterDuration = jobs.find(job => job.platform === 'editor').media.duration;
-    assert.ok(Math.abs(Number(audioProbe.stdout.trim())-masterDuration)<0.2, `TikTok voice timing ${audioProbe.stdout.trim()} vs original ${masterDuration}`);
+    assert.ok(Math.abs(Number(audioProbe.stdout.trim())-tiktok.media.duration)<0.2, `TikTok scaled-input audio ${audioProbe.stdout.trim()} vs ${tiktok.media.duration}`);
   } finally { server.kill(); await once(server,'close'); await fs.rm(folder,{recursive:true,force:true}); }
 });
