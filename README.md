@@ -7,19 +7,19 @@ modify any other installation.
 
 ## What the export does
 
-The profile now matches the supplied FFmpeg reference:
+TikTok conversion is locked to the method in commit `6378e68`. The server
+rejects conflicting environment overrides, and verifies the completed MP4.
 
-- `-itsscale 2`, making half-speed output; set `VIDEO_TIMESTAMP_SCALE=1` for
-  normal-speed delivery
+- `-itsscale 2`, making half-speed output (including source audio timestamps)
 - `fps=60,unsharp=3:3:0.4:3:3:0.4`; no resizing or cropping is applied
-- HEVC/H.265 at 10 Mbps with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
+- HEVC/H.265 at 20 Mbps with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
   `hvc1` tagging, fast-start metadata, and no embedded timecode track
 - AAC stereo audio at 256 kbps
 
 The exact `hevc_videotoolbox` encoder in the reference is macOS-only. This
 Windows installation uses FFmpeg's `libx265` encoder to create the equivalent
-HEVC/H.265 `hvc1` output. You can set `VIDEO_CODEC` in `.env` to an available
-Windows hardware encoder such as `hevc_nvenc`, `hevc_amf`, or `hevc_qsv`.
+HEVC/H.265 `hvc1` output. Hardware-encoder overrides are intentionally disabled
+for this locked TikTok profile.
 
 ## Source files accepted
 
@@ -37,7 +37,7 @@ is not possible.
 1. This machine uses a portable Node.js runtime in `tools\node` (kept out of
    Git). On another machine, install a current Node.js LTS and run `npm ci`.
 2. Copy `.env.example` to `.env` only if you want to customize the port,
-   FFmpeg paths, output quality, or upload limit.
+   FFmpeg paths, media location, or upload limit. Keep TikTok video settings intact.
 3. Double-click `Start-Local-Converter.cmd`, then open `http://127.0.0.1:4173`.
 4. Choose a video, click **Upload & convert**, and use **Download export** when
    the job completes.
