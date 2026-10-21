@@ -11,7 +11,7 @@ const queue = new JobQueue();
 await queue.prepare();
 await app.register(fastifyStatic, { root: path.join(config.root, "public"), prefix: "/" });
 
-app.get("/api/health", async () => ({ ok: true, botConfigured: Boolean(config.token), localBotApi: isLocalBotApi, profile: { name: "TikTok 1080p60", bitrate: config.export.bitrate, maxrate: config.export.maxrate, audioBitrate: "256k" } }));
+app.get("/api/health", async () => ({ ok: true, botConfigured: Boolean(config.token), localBotApi: isLocalBotApi, profile: { name: "TikTok same resolution / 60fps / half speed", bitrate: config.export.bitrate, codec: config.export.videoCodec, audioBitrate: config.export.audioBitrate } }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.get("/api/jobs/:id/download", async (request, reply) => {
   const job = queue.get(request.params.id);

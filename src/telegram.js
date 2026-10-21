@@ -57,8 +57,8 @@ export async function startTelegram(queue) {
   if ((me.username || "").toLowerCase() !== expectedUsername) {
     throw new Error(`The configured token belongs to @${me.username || "unknown"}, not ${config.botUsername}. The bot was not started.`);
   }
-  bot.command("start", (ctx) => ctx.reply("Send an original video as a File. I accept 1080p60, 2K, 3K, 4K, and any container FFmpeg can read; I will make a 1080×1920, 60fps TikTok export and return it here."));
-  bot.command("profile", (ctx) => ctx.reply("Output: 1080×1920 • 60fps • H.264 MP4 • 10 Mbps target / 12 Mbps max • AAC 256 kbps stereo • half-speed timestamp test mode."));
+  bot.command("start", (ctx) => ctx.reply("Send an original video as a File. I accept 1080p60, 2K, 3K, 4K, and any container FFmpeg can read; I will make a same-resolution, 60fps HEVC TikTok export and return it here."));
+  bot.command("profile", (ctx) => ctx.reply("Output: source resolution • 60fps • HEVC/hvc1 MP4 • 20 Mbps target • AAC 256 kbps stereo • locked half-speed timestamps."));
   bot.command("status", (ctx) => {
     const jobs = queue.snapshot().filter((job) => String(job.chatId) === String(ctx.chat.id));
     const active = jobs.find((job) => job.status === "processing") || jobs.find((job) => job.status === "queued");
@@ -77,7 +77,7 @@ export async function startTelegram(queue) {
       await saveIncoming(bot, media, target);
       const source = await probe(target);
       const job = queue.add({ sourcePath: target, sourceName: media.filename, chatId: ctx.chat.id, messageId: ctx.message.message_id, bytes: media.bytes });
-      await ctx.reply(`Accepted ${source.width}×${source.height} at ${source.fps || "unknown"} fps. Queued #${job.id.slice(0, 8)} with the 1080×1920 60fps profile.`);
+      await ctx.reply(`Accepted ${source.width}×${source.height} at ${source.fps || "unknown"} fps. Queued #${job.id.slice(0, 8)} with the same-resolution 60fps profile.`);
     } catch (error) {
       console.error("Telegram download failed:", error.message.replaceAll(config.token, "[redacted]"));
       await fs.rm(target, { force: true });
@@ -89,7 +89,7 @@ export async function startTelegram(queue) {
   });
   queue.on("complete", async (job) => {
     try {
-      await bot.api.sendDocument(job.chatId, new InputFile(job.outputPath), { caption: `Done: ${path.basename(job.outputPath)}\n1080×1920 • 60 fps • H.264 • ${humanBytes(job.media.bytes)}` });
+      await bot.api.sendDocument(job.chatId, new InputFile(job.outputPath), { caption: `Done: ${path.basename(job.outputPath)}\n${job.media.width}×${job.media.height} • 60 fps • HEVC • ${humanBytes(job.media.bytes)}` });
     } catch (error) {
       job.telegramError = error.message; queue.emitUpdate();
       await bot.api.sendMessage(job.chatId, "The export is complete, but Telegram could not accept the output. Download it from the local dashboard.");

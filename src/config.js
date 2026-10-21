@@ -3,6 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bundledFfmpeg from "ffmpeg-static";
 import bundledFfprobe from "ffprobe-static";
+import { TIKTOK_PRESET, assertTikTokPresetEnvironment } from './tiktok-preset.js';
+
+assertTikTokPresetEnvironment();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mediaRoot = path.resolve((process.env.MEDIA_ROOT || root).trim());
@@ -19,12 +22,13 @@ export const config = {
   ffprobe: process.env.FFPROBE_PATH || bundledFfprobe.path || "ffprobe",
   maxInputBytes: Math.max(0, Number(process.env.MAX_INPUT_GB || 0)) * 1024 ** 3,
   cleanupSourceAfterSend: (process.env.DELETE_SOURCE_AFTER_SEND || "true").trim().toLowerCase() !== "false",
-  inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 1)),
+  inputTimestampScale: TIKTOK_PRESET.timestampScale,
   export: {
-    bitrate: process.env.VIDEO_BITRATE || "10M",
-    maxrate: process.env.VIDEO_MAXRATE || "12M",
-    bufsize: process.env.VIDEO_BUFSIZE || "24M",
-    sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
+    bitrate: TIKTOK_PRESET.bitrate,
+    videoCodec: TIKTOK_PRESET.videoCodec,
+    gop: TIKTOK_PRESET.gop,
+    sharpen: TIKTOK_PRESET.sharpen,
+    audioBitrate: TIKTOK_PRESET.audioBitrate
   },
   directories: {
     incoming: path.join(mediaRoot, "incoming"),

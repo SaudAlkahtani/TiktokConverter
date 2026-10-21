@@ -12,11 +12,11 @@ const render = (jobs) => {
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · 1080×1920 · 60fps` : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.media?.width}×${job.media?.height} · 60fps` : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ const transport = health.localBotApi ? 'LOCAL 4K BOT API READY' : 'STANDARD TELEGRAM LIMITS'; profile.textContent = `${health.profile.name}  |  H.264 High  |  ${health.profile.bitrate} target / ${health.profile.maxrate} max  |  AAC ${health.profile.audioBitrate} stereo  |  ${transport}`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ const transport = health.localBotApi ? 'LOCAL 4K BOT API READY' : 'STANDARD TELEGRAM LIMITS'; profile.textContent = `${health.profile.name}  |  HEVC/hvc1  |  ${health.profile.bitrate} target  |  AAC ${health.profile.audioBitrate} stereo  |  ${transport}`; });
 const stream = new EventSource('/api/events'); stream.onmessage = ({data}) => render(JSON.parse(data));
 stream.onerror = () => { profile.textContent = 'Worker disconnected — make sure npm start is running.'; };

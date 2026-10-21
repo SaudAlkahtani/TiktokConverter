@@ -21,7 +21,7 @@ export class JobQueue extends EventEmitter {
     this.running = true; job.status = "processing"; job.startedAt = new Date().toISOString(); this.emitUpdate();
     try {
       const safeBase = path.basename(job.sourceName, path.extname(job.sourceName)).replace(/[^a-z0-9_-]/gi, "_").slice(0, 70) || "clip";
-      const outputPath = path.join(config.directories.output, `${safeBase}_tiktok_1080p60_${job.id.slice(0, 8)}.mp4`);
+      const outputPath = path.join(config.directories.output, `${safeBase}_tiktok_60fps_${job.id.slice(0, 8)}.mp4`);
       job.media = await render({ input: job.sourcePath, output: outputPath, onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
       job.outputPath = outputPath; job.progress = 100; job.status = "complete"; job.completedAt = new Date().toISOString(); this.emitUpdate();
       this.emit("complete", job);

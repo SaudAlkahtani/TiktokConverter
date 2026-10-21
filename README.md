@@ -7,23 +7,21 @@ modify OpenClaw or `@BigBoiSaud_bot`.
 
 ## What the export does
 
-The `TikTok 1080p60` profile makes an MP4 with:
+The TikTok profile is locked to the method in commit `6378e68` and makes an MP4 with:
 
-- 1080 × 1920 vertical canvas, preserving the whole image with black padding if
-  a clip is not vertical
-- constant 60 fps (30 fps sources are duplicated, not AI-interpolated)
-- H.264/AVC High profile, 4:2:0, `avc1`, 1-second keyframes
-- H.264 constrained VBR: 10 Mbps target / 12 Mbps maximum / 24 Mbps buffer
+- source dimensions, without resize or crop
+- constant 60 fps (lower-fps sources duplicate frames, not AI interpolation)
+- HEVC/H.265, 4:2:0, `hvc1`, 60-frame GOP
+- 20 Mbps video bitrate target, Rec.709 metadata
 - AAC stereo audio at 256 kbps and fast-start metadata
 - moderate luma/chroma sharpening (`unsharp=3:3:0.4:3:3:0.4`), Rec.709 tags,
   1-second keyframes, and no embedded timecode track
 
-`VIDEO_TIMESTAMP_SCALE=2` is enabled in this installation as a half-speed test
-mode matching the reference command's `-itsscale 2`. Set it back to `1` in
-`.env` for normal-speed delivery. It keeps the output at 60fps by duplicating
-frames; it does not generate new interpolated motion. The exporter keeps H.264
-rather than macOS-only `hevc_videotoolbox`, matching the requested
-TikTok-compatible delivery format.
+`-itsscale 2` gives half-speed playback, including scaled source-audio
+timestamps. On Windows, `libx265` replaces macOS-only `hevc_videotoolbox`.
+Conflicting `.env` values for the locked settings prevent startup; completed
+files are checked with ffprobe. The target bitrate does not guarantee a measured
+20 Mbps for simple footage.
 
 ## Source files accepted
 
@@ -87,7 +85,7 @@ completed export remains available even if Telegram rejects an oversized output.
 Set `MEDIA_ROOT` in `.env` to keep incoming and exported media on another
 drive. This installation uses `D:\Luna TikTok Exporter`. Once Telegram confirms
 it received an export, the original 4K source is automatically deleted; the
-1080p output remains available in the dashboard.
+same-resolution output remains available in the dashboard.
 
 ## Dedicated Local Bot API setup (true 4K)
 
