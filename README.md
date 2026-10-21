@@ -98,6 +98,11 @@ creates two separately downloadable MP4 files:
 | TikTok | HEVC/H.265, master dimensions, constant 60 fps, 20 Mbps target by default, Rec.709, `hvc1` | `-itsscale 2` for video (twice the merged duration) | Original-speed audio, AAC stereo 256 kbps; ends at the source duration |
 | Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 30 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
 
+This audio behavior is the same on every tab: standalone TikTok, Both, and the
+editor's TikTok export scale only video timestamps. Standalone Instagram, Both,
+and the editor's Instagram export keep video and audio at normal timing. The
+edited master keeps its timeline audio at normal speed before either export.
+
 Instagram preserves the full picture with aspect-aware padding rather than
 cropping. Its 2-second GOP uses 60 frames at 30 fps. HDR PQ/HLG sources are
 tone-mapped to SDR. TikTok sharpens moderately by default and does not resize;
