@@ -3,6 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bundledFfmpeg from "ffmpeg-static";
 import bundledFfprobe from "ffprobe-static";
+import { TIKTOK_PRESET, assertTikTokPresetEnvironment } from './tiktok-preset.js';
+
+assertTikTokPresetEnvironment();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mediaRoot = path.resolve((process.env.MEDIA_ROOT || root).trim());
@@ -19,13 +22,12 @@ export const config = {
   maxInputBytes: gigabytes * 1024 ** 3,
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
   maxUploadFiles: uploadFiles,
-  inputTimestampScale: Math.max(0.01, Number(process.env.VIDEO_TIMESTAMP_SCALE || 2)),
+  inputTimestampScale: TIKTOK_PRESET.timestampScale,
   export: {
-    videoCodec: process.env.VIDEO_CODEC || "libx265",
-    // Every export is constant 60 fps, so use the higher 20 Mbps target.
-    bitrate: process.env.VIDEO_BITRATE || "20M",
-    gop: Math.max(1, Number(process.env.VIDEO_GOP || 60)),
-    sharpen: process.env.VIDEO_SHARPEN?.trim() ?? "unsharp=3:3:0.4:3:3:0.4"
+    videoCodec: TIKTOK_PRESET.videoCodec,
+    bitrate: TIKTOK_PRESET.bitrate,
+    gop: TIKTOK_PRESET.gop,
+    sharpen: TIKTOK_PRESET.sharpen
   },
   directories: {
     incoming: path.join(mediaRoot, "incoming"),

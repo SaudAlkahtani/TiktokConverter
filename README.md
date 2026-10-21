@@ -7,19 +7,18 @@ modify any other installation.
 
 ## What the export does
 
-The profile now matches the supplied FFmpeg reference:
+The TikTok profile is locked to the FFmpeg method at commit `6378e68`:
 
-- `-itsscale 2`, making half-speed output; set `VIDEO_TIMESTAMP_SCALE=1` for
-  normal-speed delivery
+- `-itsscale 2` on the one source input, scaling video and audio timestamps
 - `fps=60,unsharp=3:3:0.4:3:3:0.4`; no resizing or cropping is applied
-- HEVC/H.265 at 10 Mbps with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
+- HEVC/H.265 at a 20 Mbps target with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
   `hvc1` tagging, fast-start metadata, and no embedded timecode track
 - AAC stereo audio at 256 kbps
 
-The exact `hevc_videotoolbox` encoder in the reference is macOS-only. This
-Windows installation uses FFmpeg's `libx265` encoder to create the equivalent
-HEVC/H.265 `hvc1` output. You can set `VIDEO_CODEC` in `.env` to an available
-Windows hardware encoder such as `hevc_nvenc`, `hevc_amf`, or `hevc_qsv`.
+TikTok always uses `libx265` and the exact one-input argument sequence from
+that commit. Conflicting `VIDEO_CODEC`, `VIDEO_BITRATE`, `VIDEO_GOP`,
+`VIDEO_SHARPEN`, or `VIDEO_TIMESTAMP_SCALE` values in `.env` stop the app.
+Instagram keeps its distinct 1080x1920 H.264 / 30 fps method.
 
 ## Source files accepted
 
@@ -74,6 +73,6 @@ The converter does not trim clips or enforce Instagram publishing duration/file-
 
 ## Both platforms tab
 
-Open `/both` to upload each source once and queue two independent exports. TikTok explicitly uses timestamp scale 2 for video (HEVC, 60 fps, existing configurable bitrate), while audio keeps its original timing and pitch (AAC stereo, 256 kbps; no tempo filter). For a one-minute source at scale 2, the video lasts two minutes and the original audio ends after one minute. Instagram keeps normal speed and the existing 1080x1920 H.264 / 30 fps / AAC profile. Each export has its own progress, failure status and download; a failed export does not prevent its partner from running. The Both tab's clear buttons operate only on exports submitted through that tab. Platform tabs also show their respective outputs from combined uploads.
+Open `/both` to upload each source once and queue two independent exports. TikTok uses the locked HEVC 60 fps / 20 Mbps method with timestamp scale 2 on the entire input, including audio. Instagram keeps normal speed and the existing 1080x1920 H.264 / 30 fps / AAC profile. Each export has its own progress, failure status and download; a failed export does not prevent its partner from running. The Both tab's clear buttons operate only on exports submitted through that tab. Platform tabs also show their respective outputs from combined uploads.
 
 Run `node --test test/*.test.js` for conversion and navigation checks.

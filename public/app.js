@@ -26,7 +26,7 @@ const render = (jobs) => {
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === "both" ? "One upload → TikTok (timestamp scale 2) + Instagram (normal speed) · two separate downloads" : platform === "instagram" ? "Reels · 1080×1920 · H.264 · 30 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · 48 kHz stereo" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === "both" ? "One upload → TikTok (locked 2× input timeline for video + audio) + Instagram (normal timing) · two downloads" : platform === "instagram" ? "Reels · 1080×1920 · H.264 · 30 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · 48 kHz stereo" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} locked target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} on the 2× input timeline  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;

@@ -3,6 +3,7 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
+import { buildTikTokArgs, TIKTOK_PRESET } from './tiktok-preset.js';
 
 const run = async (command, args) => {
   const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -13,7 +14,7 @@ const run = async (command, args) => {
 };
 
 export async function probe(input) {
-  const child = spawn(config.ffprobe, ["-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate,sample_aspect_ratio,display_aspect_ratio,color_transfer,color_primaries,color_space", "-of", "json", input], { windowsHide: true });
+  const child = spawn(config.ffprobe, ["-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name,width,height,r_frame_rate,sample_aspect_ratio,display_aspect_ratio,color_transfer,color_primaries,color_space,pix_fmt,codec_tag_string,sample_rate,channels", "-of", "json", input], { windowsHide: true });
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -22,8 +23,9 @@ export async function probe(input) {
   if (code !== 0) throw new Error(`ffprobe failed: ${stderr}`);
   const info = JSON.parse(stdout);
   const video = info.streams.find((stream) => stream.codec_type === "video") || {};
+  const audio = info.streams.find((stream) => stream.codec_type === "audio");
   if (!video.width || !video.height) throw new Error("No readable video stream was found in this file.");
-  return { duration: Number(info.format?.duration || 0), width: video.width, height: video.height, fps: video.r_frame_rate, sampleAspectRatio: video.sample_aspect_ratio, displayAspectRatio: video.display_aspect_ratio, colorTransfer: video.color_transfer, colorPrimaries: video.color_primaries, colorSpace: video.color_space };
+  return { duration: Number(info.format?.duration || 0), width: video.width, height: video.height, fps: video.r_frame_rate, hasAudio: Boolean(audio), videoCodec: video.codec_name, pixelFormat: video.pix_fmt, videoTag: video.codec_tag_string, audioCodec: audio?.codec_name, audioSampleRate: audio?.sample_rate, audioChannels: audio?.channels, sampleAspectRatio: video.sample_aspect_ratio, displayAspectRatio: video.display_aspect_ratio, colorTransfer: video.color_transfer, colorPrimaries: video.color_primaries, colorSpace: video.color_space };
 }
 
 export class RenderCancelledError extends Error {
@@ -41,24 +43,10 @@ export async function render({ input, output, onProgress = () => {}, signal, pla
   throwIfAborted(signal);
   const media = await probe(input);
   throwIfAborted(signal);
-  // TikTok scales video timestamps only. Audio comes from a second, unscaled
-  // input so its original timing and pitch are preserved.
   const instagram = platform === "instagram";
-  const expectedDuration = media.duration * (instagram ? 1 : timestampScale);
-  const filters = [
-    "fps=60",
-    config.export.sharpen
-  ].filter(Boolean).join(",");
-  const args = instagram ? buildInstagramArgs(input, output, media) : [
-    "-hide_banner", "-y", "-itsscale", String(timestampScale), "-i", input, "-i", input,
-    "-map", "0:v:0", "-map", "1:a:0?",
-    "-vf", filters,
-    "-c:v", config.export.videoCodec, "-b:v", config.export.bitrate, "-g", String(config.export.gop),
-    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-    "-tag:v", "hvc1", "-movflags", "+faststart", "-write_tmcd", "0", "-pix_fmt", "yuv420p",
-    "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2",
-    "-progress", "pipe:1", "-nostats", output
-  ];
+  if (!instagram && timestampScale !== TIKTOK_PRESET.timestampScale) throw new Error('TikTok timestamp scale is locked to 2 by commit 6378e68.');
+  const expectedDuration = media.duration * (instagram ? 1 : TIKTOK_PRESET.timestampScale);
+  const args = instagram ? buildInstagramArgs(input, output, media) : buildTikTokArgs(input, output);
   const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const stop = () => child.kill();
   signal?.addEventListener("abort", stop, { once: true });
@@ -81,7 +69,8 @@ export async function render({ input, output, onProgress = () => {}, signal, pla
     const stat = await fs.stat(output);
     const result = await probe(output);
     if (instagram && (result.width !== 1080 || result.height !== 1920 || result.sampleAspectRatio !== '1:1' || result.displayAspectRatio !== '9:16' || result.fps !== '30/1' || Math.abs(result.duration - media.duration) > 0.2)) throw new Error('Instagram export failed dimensions, frame rate or duration validation.');
-    return { ...result, platform, bytes: stat.size, output: path.basename(output) };
+    if (!instagram && (result.videoCodec !== 'hevc' || result.fps !== '60/1' || result.pixelFormat !== 'yuv420p' || result.videoTag !== 'hvc1' || result.colorSpace !== 'bt709' || result.colorPrimaries !== 'bt709' || result.colorTransfer !== 'bt709' || (media.hasAudio && (result.audioCodec !== 'aac' || result.audioSampleRate !== '48000' || result.audioChannels !== 2)))) throw new Error('TikTok export does not match the locked commit 6378e68 profile.');
+    return { ...result, platform, encoder: instagram ? 'libx264' : TIKTOK_PRESET.videoCodec, bytes: stat.size, output: path.basename(output) };
   } catch (error) {
     await fs.rm(output, { force: true });
     throw error;
