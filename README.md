@@ -13,14 +13,14 @@ video service. The local dashboard is available only on `127.0.0.1`.
    dependencies:
 
    ```powershell
-   git clone --branch codex/editor-kdenlive-workflow --single-branch https://github.com/SaudAlkahtani/TiktokConverter.git
+   git clone --branch release/editor-studio --single-branch https://github.com/SaudAlkahtani/TiktokConverter.git
    Set-Location TiktokConverter
    npm ci
    ```
 
    If the repository is already cloned, run `git fetch origin`, then
-   `git switch codex/editor-kdenlive-workflow` if the branch exists locally, or
-   `git switch --track origin/codex/editor-kdenlive-workflow` if it does not. Run
+   `git switch release/editor-studio` if the branch exists locally, or
+   `git switch --track origin/release/editor-studio` if it does not. Run
    `git pull --ff-only` and `npm ci` after switching.
 3. Create the machine-local configuration file:
 
