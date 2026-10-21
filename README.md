@@ -1,7 +1,7 @@
 # Local + Telegram Video Converter
 
-Based on `official-local-version` (`27f2768`), the latest local build before the
-Khaled branch. Browser batch uploads and the dedicated Telegram bot share one
+The maintained `release/telegram-publisher` branch supersedes the earlier
+Telegram and official-local branches. Browser batch uploads and the dedicated Telegram bot share one
 FIFO conversion queue and exactly the same FFmpeg profile. Processing runs on
 your Windows computer; the dashboard listens only on `127.0.0.1:4173`.
 
