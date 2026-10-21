@@ -17,7 +17,7 @@ export class JobQueue extends EventEmitter {
   }
   addCombined({ sourcePath, sourceName, bytes, origin = 'both', groupId = randomUUID(), encoder = 'cpu' }) {
     return [
-      this.add({ sourcePath, sourceName, bytes, platform: 'tiktok', origin, groupId, timestampScale: 2, encoder }),
+      this.add({ sourcePath, sourceName, bytes, platform: 'tiktok', origin, groupId, timestampScale: 2, encoder: 'cpu' }),
       this.add({ sourcePath, sourceName, bytes, platform: 'instagram', origin, groupId, encoder })
     ];
   }
