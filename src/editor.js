@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { config } from './config.js';
 import { probe, RenderCancelledError } from './ffmpeg.js';
 import { selectEncoder } from './encoders.js';
+import { assertColorInput, assertRec709Output } from './color-safety.js';
 
 const between = (number, min, max, label) => {
   const value = Number(number);
@@ -296,9 +297,11 @@ async function assembleSequence({ inputs, media, segments, output, videoEncoder,
 export async function renderEdit({ input, inputPaths, output, voicePath, pipPath, settings, signal, onProgress = () => {} }) {
   const inputs = inputPaths || [input];
   const sourceMedia = await probeSources(inputs);
+  const sourceColorChecks = sourceMedia.map((item, index) => assertColorInput(item, { allowHdr: true, label: `Source ${index + 1}` }));
   const segments = settings.segments || [{ sourceIndex: 0, start: 0, end: sourceMedia[0].duration }];
   const expectedDuration = segments.reduce((total, segment) => total + segment.end - segment.start, 0);
   const pipMedia = pipPath ? await probe(pipPath) : null;
+  if (pipMedia) sourceColorChecks.push(assertColorInput(pipMedia, { label: 'Picture-in-picture source' }));
   const selected = await selectEncoder(settings.encoder, 'hevc');
   const maskPath = settings.autoFaces ? `${output}.mask.mkv` : null;
   const sequencePath = `${output}.sequence.mp4`;
@@ -316,8 +319,11 @@ export async function renderEdit({ input, inputPaths, output, voicePath, pipPath
     const base = fullFirstClip ? 15 : settings.autoFaces ? 55 : 40;
     await runProcess(config.ffmpeg, args, signal, (value) => onProgress(base + Math.round(value * (100 - base) / 100)), expectedDuration);
     const result = await probe(output);
+    assertRec709Output(result, 'Edited master');
     if (result.width !== media.width || result.height !== media.height || result.fps !== '60/1' || Math.abs(result.duration - expectedDuration) > 0.2) throw new Error('Edited master did not match the timeline resolution, frame rate, or duration.');
-    return { ...result, encoder: selected.encoder, bytes: (await fs.stat(output)).size, output: path.basename(output) };
+    const colorCheck = sourceColorChecks.includes('hdr-bt2020') ? 'hdr-bt2020'
+      : sourceColorChecks.includes('untagged-sdr-assumed') ? 'untagged-sdr-assumed' : 'rec709';
+    return { ...result, encoder: selected.encoder, colorCheck, bytes: (await fs.stat(output)).size, output: path.basename(output) };
   } catch (error) {
     await fs.rm(output, { force: true });
     throw error;

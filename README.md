@@ -4,6 +4,9 @@ This Windows app edits local gym clips and exports them through one shared
 combined-converter workflow. It does not use Telegram, OpenClaw, or a cloud
 video service. The local dashboard is available only on `127.0.0.1`.
 
+Editing in DaVinci Resolve Free instead? See the
+[Resolve setup and drag-and-drop handoff](docs/DAVINCI_RESOLVE.md).
+
 ## Install on a Windows machine
 
 1. Install Git, Node.js 20 or newer, and Python 3 if you want automatic face
@@ -113,6 +116,12 @@ tone-mapped to SDR. TikTok uses the locked unsharp filter and does not resize.
 `VIDEO_TIMESTAMP_SCALE` may be omitted or set to the reference values in
 `.env`; conflicting values stop the app rather than silently change the method.
 The standalone `/instagram` page uses the same 30 fps Instagram profile.
+
+Color safety: TikTok, Instagram, and editor exports check source color tags
+before rendering and validate Rec.709 tags afterward. Tagged BT.2020 SDR or
+other unsupported profiles need a correctly graded Rec.709 master first;
+untagged inputs are treated as Rec.709 SDR. See [the Resolve guide](docs/DAVINCI_RESOLVE.md)
+for the workflow and limits of these checks.
 
 Both exports are local preparation files. TikTok and Instagram can recompress
 uploads, so no encoder can guarantee identical quality after publishing. Meta's

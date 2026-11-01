@@ -21,7 +21,9 @@ const render = (jobs) => {
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.platform === "instagram" ? "H.264 · 1080×1920 · 30fps" : "HEVC · 60fps"}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    const color = job.media?.colorCheck === 'untagged-sdr-assumed' ? 'source color untagged; Rec.709 assumed'
+      : job.media?.colorCheck === 'hdr-bt2020' ? 'HDR mapped to Rec.709' : 'Rec.709 tags checked';
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.platform === "instagram" ? "H.264 · 1080×1920 · 30fps" : "HEVC · 60fps"} · ${color}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }

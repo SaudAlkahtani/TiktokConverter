@@ -561,7 +561,9 @@ function renderJobs(allJobs) {
     const bar = document.createElement('div'); bar.className = 'bar'; const fill = document.createElement('span'); fill.style.width = `${job.progress || 0}%`; bar.append(fill);
     const bottom = document.createElement('div'); bottom.className = 'job-bottom';
     const detail = document.createElement('span'); detail.className = 'detail';
-    detail.textContent = job.status === 'failed' ? job.error : `${job.progress || 0}% · ${job.media?.width || ''}${job.media ? '×' + job.media.height : ''}${job.media?.encoder ? ' · ' + job.media.encoder : ''}`;
+    const color = job.media?.colorCheck === 'untagged-sdr-assumed' ? 'source color untagged; Rec.709 assumed'
+      : job.media?.colorCheck === 'hdr-bt2020' ? 'HDR mapped to Rec.709' : job.media ? 'Rec.709 tags checked' : '';
+    detail.textContent = job.status === 'failed' ? job.error : `${job.progress || 0}% · ${job.media?.width || ''}${job.media ? '×' + job.media.height : ''}${job.media?.encoder ? ' · ' + job.media.encoder : ''}${color ? ' · ' + color : ''}`;
     bottom.append(detail);
     if (job.downloadable) { const download = document.createElement('a'); download.className = 'download'; download.href = `/api/jobs/${job.id}/download`; download.textContent = job.platform === 'editor' ? 'Download edited master' : 'Download export'; bottom.append(download); }
     card.append(top, bar, bottom); jobsEl.append(card);
