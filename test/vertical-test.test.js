@@ -38,32 +38,36 @@ test('test UI identifies the experimental branch on every tab', async () => {
   assert.match(html, /15 Mb\/s/);
 });
 
-test('30 fps landscape and 60 fps 4K exports are vertical, correctly tagged, and normal speed', async () => {
+test('every converter uses the same 30 fps and 60 fps vertical profile', async () => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'vertical-export-test-'));
   try {
     for (const [name, size, rate, bitrate] of [['landscape30', '320x180', 30, 15], ['fourk60', '3840x2160', 60, 25]]) {
-      const input = path.join(folder, `${name}.mp4`), output = path.join(folder, `${name}-out.mp4`);
+      const input = path.join(folder, `${name}.mp4`);
       fixture(['-f', 'lavfi', '-i', `testsrc2=size=${size}:rate=${rate}:duration=0.25`,
         '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=0.25',
         '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac',
         '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', input]);
       const source = await probe(input);
-      const result = await render({ input, output, platform: 'vertical-test' });
-      assert.equal(result.width, 1080, name);
-      assert.equal(result.height, 1920, name);
-      assert.equal(result.displayAspectRatio, '9:16', name);
-      assert.equal(result.sampleAspectRatio, '1:1', name);
-      assert.equal(result.fps, `${rate}/1`, name);
-      assert.equal(result.targetVideoBitrateMbps, bitrate, name);
-      assert.equal(result.videoCodec, 'h264', name);
-      assert.equal(result.videoTag, 'avc1', name);
-      assert.equal(result.colorPrimaries, 'bt709', name);
-      assert.equal(result.colorTransfer, 'bt709', name);
-      assert.equal(result.colorSpace, 'bt709', name);
-      assert.equal(result.audioCodec, 'aac', name);
-      assert.equal(result.audioSampleRate, '48000', name);
-      assert.equal(result.audioChannels, 2, name);
-      assert.ok(Math.abs(result.duration - source.duration) < 0.2, `${name} changed playback duration`);
+      for (const platform of ['tiktok', 'instagram', 'vertical-test']) {
+        const output = path.join(folder, `${name}-${platform}.mp4`);
+        const result = await render({ input, output, platform });
+        const label = `${name}/${platform}`;
+        assert.equal(result.width, 1080, label);
+        assert.equal(result.height, 1920, label);
+        assert.equal(result.displayAspectRatio, '9:16', label);
+        assert.equal(result.sampleAspectRatio, '1:1', label);
+        assert.equal(result.fps, `${rate}/1`, label);
+        assert.equal(result.targetVideoBitrateMbps, bitrate, label);
+        assert.equal(result.videoCodec, 'h264', label);
+        assert.equal(result.videoTag, 'avc1', label);
+        assert.equal(result.colorPrimaries, 'bt709', label);
+        assert.equal(result.colorTransfer, 'bt709', label);
+        assert.equal(result.colorSpace, 'bt709', label);
+        assert.equal(result.audioCodec, 'aac', label);
+        assert.equal(result.audioSampleRate, '48000', label);
+        assert.equal(result.audioChannels, 2, label);
+        assert.ok(Math.abs(result.duration - source.duration) < 0.2, `${label} changed playback duration`);
+      }
     }
   } finally {
     await fs.rm(folder, { recursive: true, force: true });

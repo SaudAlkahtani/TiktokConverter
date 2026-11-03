@@ -62,8 +62,8 @@ test('edit mixes voice, reduces source sound, blurs a region and overlays video 
     const complete = new Promise((resolve,reject)=>{queue.on('complete',job=>{if(job.platform==='instagram')resolve(job);});queue.on('failed',job=>reject(new Error(job.error)));});
     queue.addEditor({sourcePath:input,sourceName:'gym.mp4',bytes:100,voicePath:voice,pipPath:pip,settings});
     const instagram = await complete;
-    assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'30/1');
-    assert.ok(queue.jobs.some(job=>job.platform==='tiktok'&&job.status==='complete'&&job.timestampScale===2));
+    assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'60/1');
+    assert.ok(queue.jobs.some(job=>job.platform==='tiktok'&&job.status==='complete'&&job.media.targetVideoBitrateMbps===25));
     assert.ok(queue.jobs.some(job=>job.platform==='editor'&&job.status==='complete'));
     assert.ok(queue.snapshot().every(job=>!('editor' in job)&&!('sourcePath' in job)));
   } finally { config.directories.output = priorOutput; await fs.rm(folder,{recursive:true,force:true}); }
@@ -255,14 +255,14 @@ test('local editor upload queues a 60 fps master and two finished platform expor
     const tiktok = jobs.find(job => job.platform === 'tiktok');
     const instagram = jobs.find(job => job.platform === 'instagram');
     assert.ok(Math.abs(jobs.find(job => job.platform === 'editor').media.duration - .45) < .1);
-    assert.ok(Math.abs(tiktok.media.duration - .9) < .15);
-    assert.equal(tiktok.timestampScale,2);
-    assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'30/1');
+    assert.ok(Math.abs(tiktok.media.duration - .45) < .15);
+    assert.equal(tiktok.media.targetVideoBitrateMbps,25);
+    assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'60/1');
     assert.equal(tiktok.groupId,jobs.find(job => job.platform === 'editor').id);
     assert.equal(instagram.groupId,tiktok.groupId);
     const audioProbe = spawnSync(config.ffprobe, ['-v','error','-select_streams','a:0','-show_entries','stream=duration','-of','default=noprint_wrappers=1:nokey=1',
       path.join(folder,'output',tiktok.media.output)], { encoding:'utf8', windowsHide:true });
     assert.equal(audioProbe.status,0,audioProbe.stderr);
-    assert.ok(Math.abs(Number(audioProbe.stdout.trim())-tiktok.media.duration)<0.2, `TikTok scaled-input audio ${audioProbe.stdout.trim()} vs ${tiktok.media.duration}`);
+    assert.ok(Math.abs(Number(audioProbe.stdout.trim())-tiktok.media.duration)<0.2, `TikTok audio ${audioProbe.stdout.trim()} vs ${tiktok.media.duration}`);
   } finally { server.kill(); await once(server,'close'); await fs.rm(folder,{recursive:true,force:true}); }
 });

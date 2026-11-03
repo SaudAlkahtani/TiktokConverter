@@ -62,7 +62,7 @@ test('all three exports keep a neutral gray reference neutral', async () => {
   }
 });
 
-test('BT.2020 SDR is rejected before rendering on each route', async () => {
+test('BT.2020 SDR converts on both platform routes while the editor master retains its own color policy', async () => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'converter-color-reject-'));
   try {
     const input = path.join(folder, 'bt2020.mp4');
@@ -70,8 +70,9 @@ test('BT.2020 SDR is rejected before rendering on each route', async () => {
       '-colorspace', 'bt2020nc', '-color_primaries', 'bt2020', '-color_trc', 'bt2020-10', input]);
     for (const platform of ['tiktok', 'instagram']) {
       const output = path.join(folder, `${platform}.mp4`);
-      await assert.rejects(render({ input, output, platform }), /Rec.709 SDR master/);
-      await assert.rejects(fs.stat(output), { code: 'ENOENT' });
+      const result = await render({ input, output, platform });
+      assert.equal(result.colorCheck, 'sdr-bt2020');
+      assertRec709Output(result);
     }
     const media = await probe(input);
     const output = path.join(folder, 'editor.mp4');
@@ -82,7 +83,7 @@ test('BT.2020 SDR is rejected before rendering on each route', async () => {
   }
 });
 
-test('supported HDR tone mapping keeps a neutral reference neutral in Instagram and editor', async () => {
+test('supported HDR tone mapping keeps a neutral reference neutral in both platform exports and editor', async () => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'converter-hdr-neutral-'));
   try {
     const input = path.join(folder, 'hlg.mp4');
@@ -91,6 +92,7 @@ test('supported HDR tone mapping keeps a neutral reference neutral in Instagram 
     const source = await probe(input);
     assert.equal(colorProfile(source), 'hdr-bt2020');
     const outputs = [
+      { name: 'tiktok', run: output => render({ input, output, platform: 'tiktok' }) },
       { name: 'instagram', run: output => render({ input, output, platform: 'instagram' }) },
       { name: 'editor', run: output => renderEdit({ input, output, settings: validateEditSettings({ blurRegions: [] }, source.duration) }) }
     ];

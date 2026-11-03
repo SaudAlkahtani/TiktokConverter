@@ -1,14 +1,17 @@
 # Gym Video Editor + Combined Converter
 
 **Experimental branch: `codex/vertical-1080p-fps-bitrate-test`. Test a short
-video before using a full export.** The new [Vertical 1080p test](http://127.0.0.1:4173/vertical-test)
-tab produces a 1080 × 1920 H.264 MP4 at normal speed. Inputs with an average
+video before using a full export.** TikTok, Instagram, Both, and the editor's
+final TikTok/Instagram downloads all use the same 1080 × 1920 H.264 MP4
+method at normal speed. Inputs with an average
 frame rate of 45 fps or higher become 60 fps with a 25 Mb/s video target;
 lower frame rates become 30 fps with a 15 Mb/s target. Both rates use the same
 number as the VBV maximum, while the measured average may be lower for simple
 footage. The full source frame is fitted with padding when its aspect ratio is
-not 9:16. AAC audio is 256 kb/s, 48 kHz, stereo. This test is separate from
-the locked TikTok preset, Instagram preset, and gym editor.
+not 9:16. AAC audio is 256 kb/s, 48 kHz, stereo. The
+[Vertical 1080p test](http://127.0.0.1:4173/vertical-test) tab provides a
+direct way to try this shared method. The four maintained release branches
+retain their own presets.
 
 This Windows app edits local gym clips and exports them through one shared
 combined-converter workflow. It does not use Telegram, OpenClaw, or a cloud
@@ -56,7 +59,8 @@ Editing in DaVinci Resolve Free instead? See the
 5. Start the server with `npm start` or double-click
    `Start-Local-Converter.cmd`. Open
    [http://127.0.0.1:4173/vertical-test](http://127.0.0.1:4173/vertical-test)
-   to test the new preset, or `/editor` for the existing editor. Keep the
+   to test the new preset, or `/tiktok`, `/instagram`, `/both`, or `/editor` to
+   use it through those workflows. Keep the
    command window open while processing. Run `npm run doctor` to check local
    FFmpeg and encoder capabilities. The project includes bundled FFmpeg and
    FFprobe; for a different build, set `FFMPEG_PATH` and `FFPROBE_PATH` in
@@ -109,29 +113,21 @@ creates two separately downloadable MP4 files:
 
 | Export | Video | Timing | Audio |
 | --- | --- | --- | --- |
-| TikTok | HEVC/H.265, master dimensions, constant 60 fps, locked 20 Mbps target, Rec.709, `hvc1` | `-itsscale 2` on the input (twice the merged duration) | AAC stereo 256 kbps on the same scaled timeline |
-| Instagram | H.264 High, 1080 × 1920 square-pixel frame, constant 30 fps, CRF 18 with a 12 Mbps ceiling | Normal duration | AAC stereo 128 kbps / 48 kHz |
+| TikTok | H.264 High, 1080 × 1920 square-pixel frame, 60 fps at 25 Mb/s or 30 fps at 15 Mb/s, Rec.709, `avc1` | Normal duration | AAC stereo 256 kb/s / 48 kHz |
+| Instagram | Same shared H.264 profile and frame-rate choice | Normal duration | AAC stereo 256 kb/s / 48 kHz |
 
-Standalone TikTok, Both, and the editor's TikTok export all use the exact
-conversion arguments from commit `6378e68`: one input with timestamp scale 2
-applied before mapping video and audio. The edited master keeps normal-speed
-timeline audio before that final TikTok export. Standalone Instagram, Both,
-and the editor's Instagram export retain their distinct 30 fps preset and
-normal timing. The editor's encoder choice applies to the master and Instagram,
-not the locked CPU/libx265 TikTok export.
-
-Instagram preserves the full picture with aspect-aware padding rather than
-cropping. Its 2-second GOP uses 60 frames at 30 fps. HDR PQ/HLG sources are
-tone-mapped to SDR. TikTok uses the locked unsharp filter and does not resize.
-`VIDEO_CODEC`, `VIDEO_BITRATE`, `VIDEO_GOP`, `VIDEO_SHARPEN`, and
-`VIDEO_TIMESTAMP_SCALE` may be omitted or set to the reference values in
-`.env`; conflicting values stop the app rather than silently change the method.
-The standalone `/instagram` page uses the same 30 fps Instagram profile.
+Both outputs preserve the full picture with aspect-aware padding rather than
+cropping. The GOP is two seconds at the chosen output rate. HDR PQ/HLG and
+tagged BT.2020 SDR sources are converted to Rec.709 in the final exports.
+The final H.264 conversion uses CPU libx264; the editor's GPU choice applies
+to its working master. Legacy `VIDEO_*` values from other branches are ignored
+on this experimental branch.
 
 Color safety: TikTok, Instagram, and editor exports check source color tags
-before rendering and validate Rec.709 tags afterward. Tagged BT.2020 SDR or
-other unsupported profiles need a correctly graded Rec.709 master first;
-untagged inputs are treated as Rec.709 SDR. See [the Resolve guide](docs/DAVINCI_RESOLVE.md)
+before rendering and validate Rec.709 tags afterward. The final converters
+transform supported BT.2020 sources; other unsupported profiles need a
+correctly graded Rec.709 master first. The editor master retains its separate
+color policy. Untagged inputs are treated as Rec.709 SDR. See [the Resolve guide](docs/DAVINCI_RESOLVE.md)
 for the workflow and limits of these checks.
 
 Both exports are local preparation files. TikTok and Instagram can recompress

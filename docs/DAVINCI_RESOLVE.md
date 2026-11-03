@@ -36,12 +36,12 @@ are not deleted by the handoff script.
    its actual input color space/transfer in Resolve before grading. Do not
    assume all Insta360 clips use the same color profile.
 
-The converter now checks color tags before each TikTok, Instagram, and editor
-render. It rejects tagged BT.2020 SDR, log, and inconsistent profiles instead
-of simply labeling their pixels Rec.709. TikTok also rejects HDR because its
-locked conversion command has no HDR-to-SDR step. Instagram and the editor
-accept correctly tagged BT.2020 PQ/HLG and tone-map to Rec.709; that changes
-overall tone and gamut, so review the result. Untagged files are assumed SDR
+The converter checks color tags before each TikTok, Instagram, and editor
+render. On this experimental branch, TikTok and Instagram transform correctly
+tagged BT.2020 SDR and PQ/HLG sources to Rec.709. The editor's working master
+retains its own color policy. Unsupported log or inconsistent profiles are
+rejected rather than simply relabeled Rec.709. Tone mapping changes overall
+tone and gamut, so review the result. Untagged files are assumed SDR
 Rec.709 because their original color space cannot be determined from metadata.
 After rendering, each output must carry consistent Rec.709 tags. These checks
 catch unsafe color labeling; they cannot prove that an unknown camera profile
@@ -66,12 +66,12 @@ On the Deliver page, choose a custom export to `D:\Gym Videos\Masters`:
 - **Range:** entire timeline; ensure the rendered video and audio end together.
 
 The master is not the TikTok upload. It preserves the edit before the local
-converter applies its locked TikTok method. If Resolve offers different codec
+converter applies its shared vertical 1080p method. If Resolve offers different codec
 choices on your installation, use a high-quality intraframe master that FFmpeg
 can read, and check the result with `ffprobe` or the converter's upload probe.
-Keep this master at normal speed: the converter's TikTok output retains its
-dimensions and 60 fps but applies its existing 2× input timeline. The Instagram
-output is 1080 × 1920 at 30 fps with normal timing.
+Keep this master at normal speed. Both final outputs are 1080 × 1920 at normal
+timing. A 60 fps master produces 60 fps outputs at a 25 Mb/s target; a 30 fps
+master produces 30 fps outputs at a 15 Mb/s target.
 
 ## One-step handoff
 

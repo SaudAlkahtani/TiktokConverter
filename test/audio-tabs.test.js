@@ -16,7 +16,7 @@ const audioDuration = (file) => {
   return Number(result.stdout.trim());
 };
 
-test('standalone TikTok uses the locked scaled-input method while Instagram stays normal', async () => {
+test('standalone TikTok and Instagram both preserve normal audio timing', async () => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'converter-audio-tabs-'));
   try {
     const input = path.join(folder, 'input.mp4');
@@ -29,12 +29,12 @@ test('standalone TikTok uses the locked scaled-input method while Instagram stay
 
     const tiktokPath = path.join(folder, 'tiktok.mp4');
     const instagramPath = path.join(folder, 'instagram.mp4');
-    const tiktok = await render({ input, output: tiktokPath, platform: 'tiktok', timestampScale: 2 });
+    const tiktok = await render({ input, output: tiktokPath, platform: 'tiktok' });
     const instagram = await render({ input, output: instagramPath, platform: 'instagram' });
 
-    assert.ok(Math.abs(tiktok.duration - 1.6) < 0.2, `TikTok video: ${tiktok.duration}`);
+    assert.ok(Math.abs(tiktok.duration - 0.8) < 0.2, `TikTok video: ${tiktok.duration}`);
     const tiktokAudio = audioDuration(tiktokPath);
-    assert.ok(Math.abs(tiktokAudio - 1.6) < 0.2, `TikTok scaled-input audio duration: ${tiktokAudio}`);
+    assert.ok(Math.abs(tiktokAudio - 0.8) < 0.2, `TikTok audio duration: ${tiktokAudio}`);
     assert.ok(Math.abs(instagram.duration - 0.8) < 0.2, `Instagram video: ${instagram.duration}`);
     assert.ok(Math.abs(audioDuration(instagramPath) - 0.8) < 0.2, 'Instagram audio must stay at source duration');
   } finally {
@@ -42,13 +42,11 @@ test('standalone TikTok uses the locked scaled-input method while Instagram stay
   }
 });
 
-test('TikTok tabs describe the locked scaled-input method without changing Instagram', async () => {
-  for (const page of ['index.html', 'both.html', 'editor.html']) {
+test('all converter tabs describe the experimental shared method', async () => {
+  for (const page of ['index.html', 'instagram.html', 'both.html', 'editor.html', 'vertical-test.html']) {
     const html = await fs.readFile(path.join(config.root, 'public', page), 'utf8');
-    assert.match(html, /2×/i, page);
-    assert.match(html, /audio/i, page);
-    assert.doesNotMatch(html, /original.speed audio/i, page);
+    assert.match(html, /NEW BRANCH — TEST CAREFULLY/i, page);
+    assert.match(html, /1080/i, page);
+    assert.doesNotMatch(html, /HEVC|timestamp scale 2|2× timeline/i, page);
   }
-  const instagram = await fs.readFile(path.join(config.root, 'public', 'instagram.html'), 'utf8');
-  assert.match(instagram, /original.speed AAC stereo audio/i);
 });

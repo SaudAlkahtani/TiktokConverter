@@ -10,15 +10,15 @@ export class JobQueue extends EventEmitter {
   constructor() { super(); this.jobs = []; this.running = false; this.activeJobId = null; this.activeAbortController = null; }
   snapshot() { return this.jobs.map(({ sourcePath, outputPath, editor, ...job }) => ({ ...job, downloadable: Boolean(outputPath) })); }
   emitUpdate() { this.emit("update", this.snapshot()); }
-  add({ sourcePath, sourceName, bytes, platform = "tiktok", origin = platform, groupId = null, timestampScale, encoder = 'cpu' }) {
-    const job = { id: randomUUID(), sourcePath, sourceName, bytes, platform, origin, groupId, timestampScale, encoder, status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
+  add({ sourcePath, sourceName, bytes, platform = "tiktok", origin = platform, groupId = null }) {
+    const job = { id: randomUUID(), sourcePath, sourceName, bytes, platform, origin, groupId, encoder: 'cpu', status: "queued", progress: 0, createdAt: new Date().toISOString(), outputPath: null };
     // Append so the oldest waiting upload always starts next (FIFO).
     this.jobs.push(job); this.emitUpdate(); this.pump(); return job;
   }
-  addCombined({ sourcePath, sourceName, bytes, origin = 'both', groupId = randomUUID(), encoder = 'cpu' }) {
+  addCombined({ sourcePath, sourceName, bytes, origin = 'both', groupId = randomUUID() }) {
     return [
-      this.add({ sourcePath, sourceName, bytes, platform: 'tiktok', origin, groupId, timestampScale: 2, encoder: 'cpu' }),
-      this.add({ sourcePath, sourceName, bytes, platform: 'instagram', origin, groupId, encoder })
+      this.add({ sourcePath, sourceName, bytes, platform: 'tiktok', origin, groupId }),
+      this.add({ sourcePath, sourceName, bytes, platform: 'instagram', origin, groupId })
     ];
   }
   addEditor({ sourcePath, sourcePaths = [sourcePath], sourceName, bytes, voicePath, pipPath, settings }) {
@@ -57,14 +57,14 @@ export class JobQueue extends EventEmitter {
         job.media = await renderEdit({ inputPaths: job.editor.sourcePaths, output: outputPath, voicePath: job.editor.voicePath, pipPath: job.editor.pipPath,
           settings: job.editor.settings, signal: this.activeAbortController.signal, onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
       } else {
-        job.media = await render({ input: job.sourcePath, output: outputPath, platform: job.platform, timestampScale: job.timestampScale, encoder: job.encoder,
+        job.media = await render({ input: job.sourcePath, output: outputPath, platform: job.platform,
           signal: this.activeAbortController.signal, onProgress: (progress) => { job.progress = progress; this.emitUpdate(); } });
       }
       job.outputPath = outputPath; job.progress = 100; job.status = "complete"; job.completedAt = new Date().toISOString(); this.emitUpdate();
       this.emit("complete", job);
       if (job.platform === 'editor' && !job.cancelled) {
         this.addCombined({ sourcePath: outputPath, sourceName: job.sourceName, bytes: job.media.bytes,
-          origin: 'editor', groupId: job.id, encoder: job.editor.settings.encoder });
+          origin: 'editor', groupId: job.id });
       }
     } catch (error) {
       if (!job.cancelled && !(error instanceof RenderCancelledError)) {
