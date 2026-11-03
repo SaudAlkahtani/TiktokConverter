@@ -1,5 +1,15 @@
 # Gym Video Editor + Combined Converter
 
+**Experimental branch: `codex/vertical-1080p-fps-bitrate-test`. Test a short
+video before using a full export.** The new [Vertical 1080p test](http://127.0.0.1:4173/vertical-test)
+tab produces a 1080 × 1920 H.264 MP4 at normal speed. Inputs with an average
+frame rate of 45 fps or higher become 60 fps with a 25 Mb/s video target;
+lower frame rates become 30 fps with a 15 Mb/s target. Both rates use the same
+number as the VBV maximum, while the measured average may be lower for simple
+footage. The full source frame is fitted with padding when its aspect ratio is
+not 9:16. AAC audio is 256 kb/s, 48 kHz, stereo. This test is separate from
+the locked TikTok preset, Instagram preset, and gym editor.
+
 This Windows app edits local gym clips and exports them through one shared
 combined-converter workflow. It does not use Telegram, OpenClaw, or a cloud
 video service. The local dashboard is available only on `127.0.0.1`.
@@ -16,14 +26,14 @@ Editing in DaVinci Resolve Free instead? See the
    dependencies:
 
    ```powershell
-   git clone --branch release/editor-studio --single-branch https://github.com/SaudAlkahtani/TiktokConverter.git
+   git clone --branch codex/vertical-1080p-fps-bitrate-test --single-branch https://github.com/SaudAlkahtani/TiktokConverter.git
    Set-Location TiktokConverter
    npm ci
    ```
 
    If the repository is already cloned, run `git fetch origin`, then
-   `git switch release/editor-studio` if the branch exists locally, or
-   `git switch --track origin/release/editor-studio` if it does not. Run
+   `git switch codex/vertical-1080p-fps-bitrate-test` if the branch exists locally, or
+   `git switch --track origin/codex/vertical-1080p-fps-bitrate-test` if it does not. Run
    `git pull --ff-only` and `npm ci` after switching.
 3. Create the machine-local configuration file:
 
@@ -45,7 +55,8 @@ Editing in DaVinci Resolve Free instead? See the
    Manual blur rectangles work without Python.
 5. Start the server with `npm start` or double-click
    `Start-Local-Converter.cmd`. Open
-   [http://127.0.0.1:4173/editor](http://127.0.0.1:4173/editor). Keep the
+   [http://127.0.0.1:4173/vertical-test](http://127.0.0.1:4173/vertical-test)
+   to test the new preset, or `/editor` for the existing editor. Keep the
    command window open while processing. Run `npm run doctor` to check local
    FFmpeg and encoder capabilities. The project includes bundled FFmpeg and
    FFprobe; for a different build, set `FFMPEG_PATH` and `FFPROBE_PATH` in

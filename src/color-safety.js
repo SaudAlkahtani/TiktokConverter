@@ -8,12 +8,13 @@ export function colorProfile(media) {
   if (!primaries && !transfer && !matrix) return 'untagged-sdr-assumed';
   if ([primaries, transfer, matrix].every(value => !value || value === 'bt709')) return 'rec709';
   if (primaries === 'bt2020' && matrix === 'bt2020nc' && hdrTransfers.has(transfer)) return 'hdr-bt2020';
+  if (primaries === 'bt2020' && matrix === 'bt2020nc' && ['bt2020-10', 'bt2020-12'].includes(transfer)) return 'sdr-bt2020';
   return 'unsupported';
 }
 
-export function assertColorInput(media, { allowHdr = false, label = 'Source' } = {}) {
+export function assertColorInput(media, { allowHdr = false, allowBt2020Sdr = false, label = 'Source' } = {}) {
   const profile = colorProfile(media);
-  if (profile === 'rec709' || profile === 'untagged-sdr-assumed' || (allowHdr && profile === 'hdr-bt2020')) return profile;
+  if (profile === 'rec709' || profile === 'untagged-sdr-assumed' || (allowHdr && profile === 'hdr-bt2020') || (allowBt2020Sdr && profile === 'sdr-bt2020')) return profile;
   const tags = `${media.colorPrimaries || 'untagged'} / ${media.colorTransfer || 'untagged'} / ${media.colorSpace || 'untagged'}`;
   throw new Error(`${label} color profile ${tags} cannot be safely exported as Rec.709 without risking a color or white-balance shift. Export a Rec.709 SDR master from your editor, then upload that master.`);
 }

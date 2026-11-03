@@ -1,5 +1,5 @@
 import { setupNavigation } from '/navigation.js';
-const platform = location.pathname.startsWith('/both') ? 'both' : location.pathname.startsWith('/instagram') ? 'instagram' : 'tiktok';
+const platform = location.pathname.startsWith('/vertical-test') ? 'vertical-test' : location.pathname.startsWith('/both') ? 'both' : location.pathname.startsWith('/instagram') ? 'instagram' : 'tiktok';
 const jobsEl = document.querySelector('#jobs');
 const emptyEl = document.querySelector('#empty');
 const template = document.querySelector('#job-template');
@@ -16,19 +16,22 @@ const render = (jobs) => {
   jobsEl.replaceChildren(); emptyEl.hidden = jobs.length > 0;
   for (const job of jobs) {
     const node = template.content.cloneNode(true); const el = node.querySelector('.job');
-    node.querySelector('h3').textContent = `${job.platform === 'instagram' ? 'Instagram' : 'TikTok'} · ${job.sourceName}`;
+    node.querySelector('h3').textContent = `${job.platform === 'vertical-test' ? 'Vertical 1080p test' : job.platform === 'instagram' ? 'Instagram' : 'TikTok'} · ${job.sourceName}`;
     node.querySelector('.metadata').textContent = `${bytes(job.bytes)} · queued ${new Date(job.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
     const color = job.media?.colorCheck === 'untagged-sdr-assumed' ? 'source color untagged; Rec.709 assumed'
-      : job.media?.colorCheck === 'hdr-bt2020' ? 'HDR mapped to Rec.709' : 'Rec.709 tags checked';
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.platform === "instagram" ? "H.264 · 1080×1920 · 30fps" : "HEVC · 60fps"} · ${color}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+      : job.media?.colorCheck === 'hdr-bt2020' ? 'HDR mapped to Rec.709'
+      : job.media?.colorCheck === 'sdr-bt2020' ? 'BT.2020 converted to Rec.709' : 'Rec.709 tags checked';
+    const format = job.platform === 'vertical-test' ? `H.264 · 1080×1920 · ${job.media?.fps === '60/1' ? '60' : '30'}fps · ${job.media?.targetVideoBitrateMbps} Mb/s target`
+      : job.platform === 'instagram' ? 'H.264 · 1080×1920 · 30fps' : 'HEVC · 60fps';
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${format} · ${color}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === "both" ? "One upload → TikTok (locked 2× input timeline for video + audio) + Instagram (1080×1920 / 30 fps, normal timing) · two downloads" : platform === "instagram" ? "Reels · 1080×1920 · H.264 · 30 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · original audio timing" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} locked target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} on the 2× input timeline  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = platform === 'vertical-test' ? `TEST MODE · 1080×1920 H.264 · source ≥45 fps → 60 fps at 25 Mb/s target · source <45 fps → 30 fps at 15 Mb/s target · normal speed · up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per file` : platform === "both" ? "One upload → TikTok (locked 2× input timeline for video + audio) + Instagram (1080×1920 / 30 fps, normal timing) · two downloads" : platform === "instagram" ? "Reels · 1080×1920 · H.264 · 30 fps · CRF 18 · 12 Mbps ceiling · AAC 128k · original audio timing" : `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} locked target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} on the 2× input timeline  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;
