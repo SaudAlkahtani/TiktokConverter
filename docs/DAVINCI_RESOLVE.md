@@ -70,9 +70,9 @@ converter applies its shared vertical 1080p method. If Resolve offers different 
 choices on your installation, use a high-quality intraframe master that FFmpeg
 can read, and check the result with `ffprobe` or the converter's upload probe.
 Keep this master at normal speed. Both final outputs are 1080 × 1920. A 60 fps
-master produces 60 fps outputs at a 25 Mb/s target using the 2× input timeline
-slowdown for video and audio. A 30 fps master produces 30 fps outputs at a
-15 Mb/s target with normal timing.
+master produces a TikTok export at 60 fps / 25 Mb/s with the 2× input timeline
+slowdown for video and audio, plus an Instagram export at 30 fps / 15 Mb/s with
+the master's normal duration.
 
 ## One-step handoff
 

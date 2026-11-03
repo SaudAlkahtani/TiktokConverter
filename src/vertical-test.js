@@ -16,6 +16,10 @@ export function verticalTestProfile(media) {
   return { sourceFps, fps, bitrateMbps, timestampScale, colorCheck };
 }
 
+export function instagramProfile(media) {
+  return { ...verticalTestProfile(media), fps: 30, bitrateMbps: 15, timestampScale: 1 };
+}
+
 export function buildVerticalTestArgs(input, output, media, profile = verticalTestProfile(media)) {
   const hdr = profile.colorCheck === 'hdr-bt2020';
   const wideSdr = profile.colorCheck === 'sdr-bt2020';

@@ -2,16 +2,16 @@
 
 **Experimental branch: `codex/vertical-1080p-fps-bitrate-test`. Test a short
 video before using a full export.** TikTok, Instagram, Both, and the editor's
-final TikTok/Instagram downloads all use the same 1080 × 1920 H.264 MP4
-method. Inputs with an average frame rate of 45 fps or higher become 60 fps
-with a 25 Mb/s video target and `-itsscale 2` before input, slowing video and
-audio to a 2× timeline. Lower frame rates become 30 fps with a 15 Mb/s target
-at normal speed. Both rates use the same
-number as the VBV maximum, while the measured average may be lower for simple
-footage. The full source frame is fitted with padding when its aspect ratio is
-not 9:16. AAC audio is 256 kb/s, 48 kHz, stereo. The
+final downloads are 1080 × 1920 H.264 MP4 files. TikTok and the test tab use
+60 fps at 25 Mb/s with `-itsscale 2` for a 60 fps source, slowing video and
+audio to a 2× timeline. Lower source frame rates use 30 fps at 15 Mb/s and
+normal speed. Instagram always uses 30 fps at 15 Mb/s and normal speed,
+including for 3K 60 fps sources. These rates are encoder targets and ceilings;
+the measured average may be lower for simple footage. The full source frame is
+fitted with padding when its aspect ratio is not 9:16. AAC audio is 256 kb/s,
+48 kHz, stereo. The
 [Vertical 1080p test](http://127.0.0.1:4173/vertical-test) tab provides a
-direct way to try this shared method. The four maintained release branches
+direct way to try the TikTok frame-rate method. The four maintained release branches
 retain their own presets.
 
 This Windows app edits local gym clips and exports them through one shared
@@ -115,14 +115,14 @@ creates two separately downloadable MP4 files:
 | Export | Video | Timing | Audio |
 | --- | --- | --- | --- |
 | TikTok | H.264 High, 1080 × 1920 square-pixel frame, 60 fps at 25 Mb/s or 30 fps at 15 Mb/s, Rec.709, `avc1` | 60 fps: 2× input timeline; 30 fps: normal duration | AAC stereo 256 kb/s / 48 kHz on the same timeline |
-| Instagram | Same shared H.264 profile and frame-rate choice | 60 fps: 2× input timeline; 30 fps: normal duration | AAC stereo 256 kb/s / 48 kHz on the same timeline |
+| Instagram | H.264 High, 1080 × 1920, always 30 fps at 15 Mb/s, Rec.709, `avc1` | Normal duration, including 60 fps sources | AAC stereo 256 kb/s / 48 kHz at original timing |
 
 Both outputs preserve the full picture with aspect-aware padding rather than
 cropping. The GOP is two seconds at the chosen output rate. HDR PQ/HLG and
 tagged BT.2020 SDR sources are converted to Rec.709 in the final exports.
-For a 60 fps source, the input timestamp scale affects both video and audio;
-the finished file lasts about twice as long. A 30 fps source retains its
-original duration.
+For a 60 fps source, TikTok's input timestamp scale affects both video and
+audio; its finished file lasts about twice as long. Instagram keeps the source
+duration while converting to 30 fps.
 The final H.264 conversion uses CPU libx264; the editor's GPU choice applies
 to its working master. Legacy `VIDEO_*` values from other branches are ignored
 on this experimental branch.

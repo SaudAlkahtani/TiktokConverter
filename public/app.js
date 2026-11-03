@@ -30,7 +30,12 @@ const render = (jobs) => {
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${platform === 'both' ? 'TWO EXPORTS · ' : ''}TEST BRANCH · 1080×1920 H.264 · source ≥45 fps → 60 fps at 25 Mb/s, 2× timeline (half speed) · source <45 fps → 30 fps at 15 Mb/s, normal speed · AAC 256 kb/s · up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per file`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{
+  const tiktokProfile = 'TikTok/test: source ≥45 fps → 60 fps at 25 Mb/s, 2× timeline; lower fps → 30 fps at 15 Mb/s, normal speed';
+  const instagramProfile = 'Instagram: 1080×1920 H.264 · always 30 fps at 15 Mb/s · normal speed';
+  const mode = platform === 'instagram' ? instagramProfile : platform === 'both' ? `${tiktokProfile} · ${instagramProfile}` : tiktokProfile;
+  profile.textContent = `TEST BRANCH · ${mode} · AAC 256 kb/s · up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per file`;
+});
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;
