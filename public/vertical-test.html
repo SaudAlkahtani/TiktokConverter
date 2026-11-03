@@ -14,7 +14,7 @@
       <section class="hero">
         <p class="eyebrow">EXPERIMENTAL LOCAL CONVERTER</p>
         <h1>Any resolution <span>→</span> 1080p vertical</h1>
-        <p class="lede">Export a 1080 × 1920 H.264 MP4 at normal speed. The full frame is fitted inside 9:16; other shapes get padding instead of being cropped. Source video at 45 fps or higher becomes 60 fps with a 25 Mb/s target. Lower frame rates become 30 fps with a 15 Mb/s target.</p>
+        <p class="lede">Export a 1080 × 1920 H.264 MP4. The full frame is fitted inside 9:16; other shapes get padding instead of being cropped. Source video at 45 fps or higher becomes 60 fps with a 25 Mb/s target and a 2× input timeline slowdown. Lower frame rates become 30 fps with a 15 Mb/s target at normal speed.</p>
         <div class="profile" id="profile">Checking worker…</div>
       </section>
       <section class="guide">
@@ -28,7 +28,7 @@
           <label class="file-picker"><input id="video-file" name="video" type="file" accept="video/*,.mov,.mkv,.avi,.webm,.m4v" multiple required /><span id="file-label">Choose videos</span></label>
           <button type="submit">Create test export</button>
         </form>
-        <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server. This mode does not slow the video down.</p>
+        <p class="upload-status" id="upload-status" aria-live="polite">Files are sent only to this local server. The 60 fps path slows video and audio to half speed; the 30 fps path keeps normal speed.</p>
       </section>
       <section class="jobs-section">
         <div class="section-heading"><div><p class="eyebrow">TEST PROCESSING QUEUE</p><h2>Vertical exports</h2></div><div class="queue-tools"><button id="clear-active" class="queue-button" type="button">Clear active</button><button id="clear-completed" class="queue-button" type="button">Clear completed</button><span class="live"><i></i> LIVE</span></div></div>

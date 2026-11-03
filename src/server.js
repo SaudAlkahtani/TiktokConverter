@@ -27,7 +27,7 @@ app.get('/tiktok', async (request, reply) => reply.sendFile('index.html'));
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "Experimental vertical 1080p", codec: "H.264", bitrate: "25 Mb/s at 60 fps; 15 Mb/s at 30 fps", audioBitrate: "256k", timing: "normal speed" } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "Experimental vertical 1080p", codec: "H.264", bitrate: "25 Mb/s at 60 fps; 15 Mb/s at 30 fps", audioBitrate: "256k", timing: "60 fps uses 2× input timeline; 30 fps stays normal" } }));
 app.get('/api/editor/encoders', async () => ({ ...await encoderCapabilities(), faceDetection: await faceDetectorAvailable() }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.delete("/api/jobs/active", async (request) => queue.clearActive(request.query.platform));

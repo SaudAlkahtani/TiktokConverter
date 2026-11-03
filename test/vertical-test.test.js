@@ -13,16 +13,19 @@ function fixture(args) {
   assert.equal(result.status, 0, result.stderr);
 }
 
-test('vertical test selects cadence and bitrate from average frame rate', () => {
+test('vertical test selects cadence, bitrate, and slowdown from average frame rate', () => {
   for (const [rate, fps, bitrateMbps] of [['30000/1001', 30, 15], ['30/1', 30, 15], ['60000/1001', 60, 25], ['60/1', 60, 25], ['120/1', 60, 25], ['24/1', 30, 15]]) {
     const profile = verticalTestProfile({ fps: '120/1', averageFrameRate: rate });
     assert.equal(profile.fps, fps, rate);
     assert.equal(profile.bitrateMbps, bitrateMbps, rate);
+    assert.equal(profile.timestampScale, fps === 60 ? 2 : 1, rate);
     const args = buildVerticalTestArgs('input.mp4', 'output.mp4', {}, profile);
     assert.equal(args[args.indexOf('-b:v') + 1], `${bitrateMbps}M`);
     assert.equal(args[args.indexOf('-maxrate') + 1], `${bitrateMbps}M`);
     assert.equal(args[args.indexOf('-r') + 1], String(fps));
     assert.match(args[args.indexOf('-vf') + 1], /pad=1080:1920/);
+    if (fps === 60) assert.deepEqual(args.slice(2, 5), ['-itsscale', '2', '-i']);
+    else assert.equal(args.includes('-itsscale'), false);
   }
   assert.throws(() => verticalTestProfile({ fps: '0/0' }), /frame rate/);
 });
@@ -38,7 +41,7 @@ test('test UI identifies the experimental branch on every tab', async () => {
   assert.match(html, /15 Mb\/s/);
 });
 
-test('every converter uses the same 30 fps and 60 fps vertical profile', async () => {
+test('every converter keeps 30 fps normal and slows 60 fps video and audio to 2× duration', async () => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'vertical-export-test-'));
   try {
     for (const [name, size, rate, bitrate] of [['landscape30', '320x180', 30, 15], ['fourk60', '3840x2160', 60, 25]]) {
@@ -58,6 +61,7 @@ test('every converter uses the same 30 fps and 60 fps vertical profile', async (
         assert.equal(result.sampleAspectRatio, '1:1', label);
         assert.equal(result.fps, `${rate}/1`, label);
         assert.equal(result.targetVideoBitrateMbps, bitrate, label);
+        assert.equal(result.timestampScale, rate === 60 ? 2 : 1, label);
         assert.equal(result.videoCodec, 'h264', label);
         assert.equal(result.videoTag, 'avc1', label);
         assert.equal(result.colorPrimaries, 'bt709', label);
@@ -66,7 +70,12 @@ test('every converter uses the same 30 fps and 60 fps vertical profile', async (
         assert.equal(result.audioCodec, 'aac', label);
         assert.equal(result.audioSampleRate, '48000', label);
         assert.equal(result.audioChannels, 2, label);
-        assert.ok(Math.abs(result.duration - source.duration) < 0.2, `${label} changed playback duration`);
+        const expectedDuration = source.duration * (rate === 60 ? 2 : 1);
+        assert.ok(Math.abs(result.duration - expectedDuration) < 0.2, `${label} video duration ${result.duration}`);
+        const audio = spawnSync(config.ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=duration',
+          '-of', 'default=noprint_wrappers=1:nokey=1', output], { windowsHide: true, encoding: 'utf8' });
+        assert.equal(audio.status, 0, audio.stderr);
+        assert.ok(Math.abs(Number(audio.stdout.trim()) - expectedDuration) < 0.2, `${label} audio duration ${audio.stdout.trim()}`);
       }
     }
   } finally {

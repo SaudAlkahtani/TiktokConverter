@@ -11,8 +11,9 @@ export function verticalTestProfile(media) {
   if (!Number.isFinite(sourceFps) || sourceFps <= 0) throw new Error('The source frame rate could not be read.');
   const fps = sourceFps >= 45 ? 60 : 30;
   const bitrateMbps = fps === 60 ? 25 : 15;
+  const timestampScale = fps === 60 ? 2 : 1;
   const colorCheck = assertColorInput(media, { allowHdr: true, allowBt2020Sdr: true });
-  return { sourceFps, fps, bitrateMbps, colorCheck };
+  return { sourceFps, fps, bitrateMbps, timestampScale, colorCheck };
 }
 
 export function buildVerticalTestArgs(input, output, media, profile = verticalTestProfile(media)) {
@@ -22,7 +23,7 @@ export function buildVerticalTestArgs(input, output, media, profile = verticalTe
     ? `zscale=pin=bt2020:tin=${media.colorTransfer}:min=bt2020nc:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=mobius:desat=2,zscale=t=bt709:m=bt709:r=limited,`
     : wideSdr ? `zscale=pin=bt2020:tin=${media.colorTransfer}:min=bt2020nc:p=bt709:t=bt709:m=bt709:r=limited,` : '';
   const bitrate = `${profile.bitrateMbps}M`;
-  return ['-hide_banner', '-y', '-i', input, '-map', '0:v:0', '-map', '0:a:0?',
+  return ['-hide_banner', '-y', ...(profile.timestampScale === 2 ? ['-itsscale', '2'] : []), '-i', input, '-map', '0:v:0', '-map', '0:a:0?',
     '-vf', colorFilter + `scale=trunc(iw*sar/2)*2:ih,setsar=1,scale=1080:1920:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${profile.fps},format=yuv420p`,
     '-c:v', 'libx264', '-preset', 'slow', '-b:v', bitrate, '-maxrate', bitrate,
     '-bufsize', `${profile.bitrateMbps * 2}M`, '-profile:v', 'high', '-level:v', profile.fps === 60 ? '4.2' : '4.1',

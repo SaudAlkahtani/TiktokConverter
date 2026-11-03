@@ -47,6 +47,7 @@ test('all converter tabs describe the experimental shared method', async () => {
     const html = await fs.readFile(path.join(config.root, 'public', page), 'utf8');
     assert.match(html, /NEW BRANCH — TEST CAREFULLY/i, page);
     assert.match(html, /1080/i, page);
-    assert.doesNotMatch(html, /HEVC|timestamp scale 2|2× timeline/i, page);
+    assert.match(html, /2×|half speed/i, page);
+    assert.doesNotMatch(html, /HEVC/i, page);
   }
 });

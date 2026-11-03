@@ -69,9 +69,10 @@ The master is not the TikTok upload. It preserves the edit before the local
 converter applies its shared vertical 1080p method. If Resolve offers different codec
 choices on your installation, use a high-quality intraframe master that FFmpeg
 can read, and check the result with `ffprobe` or the converter's upload probe.
-Keep this master at normal speed. Both final outputs are 1080 × 1920 at normal
-timing. A 60 fps master produces 60 fps outputs at a 25 Mb/s target; a 30 fps
-master produces 30 fps outputs at a 15 Mb/s target.
+Keep this master at normal speed. Both final outputs are 1080 × 1920. A 60 fps
+master produces 60 fps outputs at a 25 Mb/s target using the 2× input timeline
+slowdown for video and audio. A 30 fps master produces 30 fps outputs at a
+15 Mb/s target with normal timing.
 
 ## One-step handoff
 

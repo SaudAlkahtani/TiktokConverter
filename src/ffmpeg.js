@@ -47,7 +47,7 @@ export async function render({ input, output, onProgress = () => {}, signal, pla
   if (!['tiktok', 'instagram', 'vertical-test'].includes(platform)) throw new Error('Unknown conversion mode.');
   const verticalProfile = verticalTestProfile(media);
   const colorCheck = verticalProfile.colorCheck;
-  const expectedDuration = media.duration;
+  const expectedDuration = media.duration * verticalProfile.timestampScale;
   const args = buildVerticalTestArgs(input, output, media, verticalProfile);
   const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const stop = () => child.kill();
@@ -71,8 +71,8 @@ export async function render({ input, output, onProgress = () => {}, signal, pla
     const stat = await fs.stat(output);
     const result = await probe(output);
     assertRec709Output(result, `${platform} export`);
-    if (result.width !== 1080 || result.height !== 1920 || result.sampleAspectRatio !== '1:1' || result.displayAspectRatio !== '9:16' || result.fps !== `${verticalProfile.fps}/1` || result.videoCodec !== 'h264' || result.pixelFormat !== 'yuv420p' || result.videoTag !== 'avc1' || Math.abs(result.duration - media.duration) > 0.2 || (media.hasAudio && (result.audioCodec !== 'aac' || result.audioSampleRate !== '48000' || result.audioChannels !== 2))) throw new Error(`${platform} export failed the shared vertical profile validation.`);
-    return { ...result, platform, encoder: 'libx264', colorCheck, targetVideoBitrateMbps: verticalProfile.bitrateMbps, bytes: stat.size, output: path.basename(output) };
+    if (result.width !== 1080 || result.height !== 1920 || result.sampleAspectRatio !== '1:1' || result.displayAspectRatio !== '9:16' || result.fps !== `${verticalProfile.fps}/1` || result.videoCodec !== 'h264' || result.pixelFormat !== 'yuv420p' || result.videoTag !== 'avc1' || Math.abs(result.duration - expectedDuration) > 0.2 || (media.hasAudio && (result.audioCodec !== 'aac' || result.audioSampleRate !== '48000' || result.audioChannels !== 2))) throw new Error(`${platform} export failed the shared vertical profile validation.`);
+    return { ...result, platform, encoder: 'libx264', colorCheck, timestampScale: verticalProfile.timestampScale, targetVideoBitrateMbps: verticalProfile.bitrateMbps, bytes: stat.size, output: path.basename(output) };
   } catch (error) {
     await fs.rm(output, { force: true });
     throw error;

@@ -63,6 +63,7 @@ test('edit mixes voice, reduces source sound, blurs a region and overlays video 
     queue.addEditor({sourcePath:input,sourceName:'gym.mp4',bytes:100,voicePath:voice,pipPath:pip,settings});
     const instagram = await complete;
     assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'60/1');
+    assert.ok(Math.abs(instagram.media.duration-result.duration*2)<.2);
     assert.ok(queue.jobs.some(job=>job.platform==='tiktok'&&job.status==='complete'&&job.media.targetVideoBitrateMbps===25));
     assert.ok(queue.jobs.some(job=>job.platform==='editor'&&job.status==='complete'));
     assert.ok(queue.snapshot().every(job=>!('editor' in job)&&!('sourcePath' in job)));
@@ -255,9 +256,10 @@ test('local editor upload queues a 60 fps master and two finished platform expor
     const tiktok = jobs.find(job => job.platform === 'tiktok');
     const instagram = jobs.find(job => job.platform === 'instagram');
     assert.ok(Math.abs(jobs.find(job => job.platform === 'editor').media.duration - .45) < .1);
-    assert.ok(Math.abs(tiktok.media.duration - .45) < .15);
+    assert.ok(Math.abs(tiktok.media.duration - .9) < .15);
     assert.equal(tiktok.media.targetVideoBitrateMbps,25);
     assert.equal(instagram.media.width,1080);assert.equal(instagram.media.height,1920);assert.equal(instagram.media.fps,'60/1');
+    assert.ok(Math.abs(instagram.media.duration - .9) < .15);
     assert.equal(tiktok.groupId,jobs.find(job => job.platform === 'editor').id);
     assert.equal(instagram.groupId,tiktok.groupId);
     const audioProbe = spawnSync(config.ffprobe, ['-v','error','-select_streams','a:0','-show_entries','stream=duration','-of','default=noprint_wrappers=1:nokey=1',
