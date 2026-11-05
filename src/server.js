@@ -18,7 +18,7 @@ await app.register(multipart, { limits: { files: config.maxUploadFiles, fileSize
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "HEVC 60fps", codec: config.export.videoCodec, bitrate: config.export.bitrate, gop: config.export.gop, audioBitrate: "256k" } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: 'Vertical TikTok export', codec: 'H.264', highFpsBitrate: '25M', lowFpsBitrate: '15M', audioBitrate: '256k' } }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.delete("/api/jobs/active", async () => queue.clearActive());
 app.delete("/api/jobs/completed", async () => queue.clearCompleted());

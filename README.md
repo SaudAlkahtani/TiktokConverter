@@ -7,19 +7,7 @@ modify any other installation.
 
 ## What the export does
 
-TikTok conversion is locked to the method in commit `6378e68`. The server
-rejects conflicting environment overrides, and verifies the completed MP4.
-
-- `-itsscale 2`, making half-speed output (including source audio timestamps)
-- `fps=60,unsharp=3:3:0.4:3:3:0.4`; no resizing or cropping is applied
-- HEVC/H.265 at 20 Mbps with a 60-frame GOP, Rec.709 metadata, 4:2:0 pixels,
-  `hvc1` tagging, fast-start metadata, and no embedded timecode track
-- AAC stereo audio at 256 kbps
-
-The exact `hevc_videotoolbox` encoder in the reference is macOS-only. This
-Windows installation uses FFmpeg's `libx265` encoder to create the equivalent
-HEVC/H.265 `hvc1` output. Hardware-encoder overrides are intentionally disabled
-for this locked TikTok profile.
+TikTok exports use the standard vertical profile: 1080×1920 H.264 MP4, AAC 256 kb/s stereo, square pixels, and verified Rec.709 tags. Sources at 45 fps or higher become 60 fps at a 25 Mb/s target and play on a 2× timeline with matching audio. Lower frame rates become 30 fps at 15 Mb/s and keep normal timing. The picture is fit inside the frame with padding when needed.
 
 ## Source files accepted
 

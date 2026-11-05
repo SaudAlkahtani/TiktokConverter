@@ -18,12 +18,12 @@ const render = (jobs) => {
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · HEVC · 60fps` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · H.264 · ${job.media?.fps === '60/1' ? '60' : '30'}fps · ${job.media?.targetVideoBitrateMbps} Mb/s target` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
 };
-fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch`; });
+fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `Welcome! TikTok exports are 1080×1920 H.264. 60 fps sources use 60 fps, 25 Mb/s and half speed; lower frame rates use 30 fps, 15 Mb/s and normal speed. AAC 256 kb/s · up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per file${health.telegram ? ` · Telegram: ${health.telegram.status}` : ''}`; });
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
   fileLabel.textContent = files.length === 0 ? 'Choose videos' : files.length === 1 ? files[0].name : `${files.length} videos selected`;

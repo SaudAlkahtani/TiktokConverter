@@ -3,9 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bundledFfmpeg from "ffmpeg-static";
 import bundledFfprobe from "ffprobe-static";
-import { TIKTOK_PRESET, assertTikTokPresetEnvironment } from './tiktok-preset.js';
-
-assertTikTokPresetEnvironment();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mediaRoot = path.resolve((process.env.MEDIA_ROOT || root).trim());
@@ -22,13 +19,6 @@ export const config = {
   maxInputBytes: gigabytes * 1024 ** 3,
   uploadLimitBytes: (gigabytes || 20) * 1024 ** 3,
   maxUploadFiles: uploadFiles,
-  inputTimestampScale: TIKTOK_PRESET.timestampScale,
-  export: {
-    videoCodec: TIKTOK_PRESET.videoCodec,
-    bitrate: TIKTOK_PRESET.bitrate,
-    gop: TIKTOK_PRESET.gop,
-    sharpen: TIKTOK_PRESET.sharpen
-  },
   directories: {
     incoming: path.join(mediaRoot, "incoming"),
     output: path.join(mediaRoot, "output"),
