@@ -84,6 +84,22 @@ export function validateEditSettings(raw, sourceDurations) {
   if (destination !== 'both') throw new Error('The editor exports to TikTok and Instagram together.');
   const encoder = raw.encoder || 'auto';
   if (!['auto', 'cpu', 'nvidia', 'amd'].includes(encoder)) throw new Error('Choose an encoding method.');
+  const motionTitles = raw.motionTitles ?? [];
+  if (!Array.isArray(motionTitles) || motionTitles.length > 30) throw new Error('Choose up to 30 motion titles.');
+  const titles = motionTitles.map((title, index) => {
+    if (!title || typeof title !== 'object' || Array.isArray(title)) throw new Error(`Motion title ${index + 1} is invalid.`);
+    const text = String(title.text ?? '').trim();
+    if (!text || text.length > 160) throw new Error(`Motion title ${index + 1} needs 1–160 characters.`);
+    const start = between(title.start, 0, duration, `Motion title ${index + 1} start`);
+    const end = between(title.end, start + 0.05, duration + 0.1, `Motion title ${index + 1} end`);
+    const position = title.position || 'bottom';
+    if (!['top', 'center', 'bottom'].includes(position)) throw new Error(`Motion title ${index + 1} position is invalid.`);
+    const color = title.color || '#ffffff';
+    if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error(`Motion title ${index + 1} needs a six-digit hex color.`);
+    return { text, start: decimal(start), end: decimal(end), position, color,
+      background: title.background !== false,
+      fontSize: between(title.fontSize ?? 72, 24, 180, `Motion title ${index + 1} size`) };
+  });
   return {
     autoFaces: raw.autoFaces === true,
     keepClear, blurRegions, segments,
@@ -92,7 +108,7 @@ export function validateEditSettings(raw, sourceDurations) {
     originalVolume: between(raw.originalVolume ?? 0.25, 0, 1, 'Original sound'),
     pipStart: decimal(pipStart), pipEnd: decimal(pipEnd),
     pipWidth: between(raw.pipWidth ?? 0.32, 0.15, 0.8, 'Picture in picture size'),
-    pipPosition, destination, encoder
+    pipPosition, destination, encoder, motionTitles: titles
   };
 }
 
@@ -295,6 +311,7 @@ async function assembleSequence({ inputs, media, segments, output, videoEncoder,
 }
 
 export async function renderEdit({ input, inputPaths, output, voicePath, pipPath, settings, signal, onProgress = () => {} }) {
+  const baseProgress = value => onProgress(settings.motionTitles?.length ? Math.round(value * 0.7) : value);
   const inputs = inputPaths || [input];
   const sourceMedia = await probeSources(inputs);
   const sourceColorChecks = sourceMedia.map((item, index) => assertColorInput(item, { allowHdr: true, label: `Source ${index + 1}` }));
@@ -311,16 +328,32 @@ export async function renderEdit({ input, inputPaths, output, voicePath, pipPath
     let workInput = inputs[0], media = sourceMedia[0];
     if (!fullFirstClip) {
       await assembleSequence({ inputs, media: sourceMedia, segments, output: sequencePath, videoEncoder: selected.encoder,
-        signal, onProgress });
-      workInput = sequencePath; media = await probe(sequencePath); onProgress(40);
+        signal, onProgress: baseProgress });
+      workInput = sequencePath; media = await probe(sequencePath); baseProgress(40);
     }
-    if (maskPath) { await createFaceMask(workInput, maskPath, media, settings, signal); onProgress(fullFirstClip ? 15 : 55); }
+    if (maskPath) { await createFaceMask(workInput, maskPath, media, settings, signal); baseProgress(fullFirstClip ? 15 : 55); }
     const args = buildEditArgs({ input: workInput, output, voicePath, pipPath, maskPath, media, pipMedia, settings, videoEncoder: selected.encoder });
     const base = fullFirstClip ? 15 : settings.autoFaces ? 55 : 40;
-    await runProcess(config.ffmpeg, args, signal, (value) => onProgress(base + Math.round(value * (100 - base) / 100)), expectedDuration);
-    const result = await probe(output);
+    await runProcess(config.ffmpeg, args, signal, (value) => baseProgress(base + Math.round(value * (100 - base) / 100)), expectedDuration);
+    let result = await probe(output);
     assertRec709Output(result, 'Edited master');
     if (result.width !== media.width || result.height !== media.height || result.fps !== '60/1' || Math.abs(result.duration - expectedDuration) > 0.2) throw new Error('Edited master did not match the timeline resolution, frame rate, or duration.');
+    if (settings.motionTitles?.length) {
+      const motionOutput = `${output}.remotion.mp4`;
+      try {
+        const {renderMotionGraphics} = await import('./remotion-render.js');
+        await renderMotionGraphics({input: output, output: motionOutput, media: result, titles: settings.motionTitles,
+          signal, onProgress: value => onProgress(70 + Math.round(value * 29 / 100))});
+        const motionMedia = await probe(motionOutput);
+        assertRec709Output(motionMedia, 'Remotion master');
+        if (motionMedia.width !== result.width || motionMedia.height !== result.height || motionMedia.fps !== '60/1' ||
+          Math.abs(motionMedia.duration - expectedDuration) > 0.2 || motionMedia.audioCodec !== result.audioCodec)
+          throw new Error('Remotion changed the edited master dimensions, timing, or audio.');
+        await fs.rm(output, {force: true});
+        await fs.rename(motionOutput, output);
+        result = motionMedia;
+      } finally { await fs.rm(motionOutput, {force: true}); }
+    }
     const colorCheck = sourceColorChecks.includes('hdr-bt2020') ? 'hdr-bt2020'
       : sourceColorChecks.includes('untagged-sdr-assumed') ? 'untagged-sdr-assumed' : 'rec709';
     return { ...result, encoder: selected.encoder, colorCheck, bytes: (await fs.stat(output)).size, output: path.basename(output) };

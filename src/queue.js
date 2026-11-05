@@ -24,7 +24,8 @@ export class JobQueue extends EventEmitter {
   addEditor({ sourcePath, sourcePaths = [sourcePath], sourceName, bytes, voicePath, pipPath, settings }) {
     const job = { id: randomUUID(), sourcePath, sourceName, bytes, platform: 'editor', origin: 'editor', status: 'queued', progress: 0,
       createdAt: new Date().toISOString(), outputPath: null, editSummary: { destination: settings.destination, encoder: settings.encoder,
-        sources: sourcePaths.length, clips: settings.segments.length, autoFaces: settings.autoFaces, blurRegions: settings.blurRegions.length, voice: Boolean(voicePath), pip: Boolean(pipPath) },
+        sources: sourcePaths.length, clips: settings.segments.length, autoFaces: settings.autoFaces, blurRegions: settings.blurRegions.length,
+        motionTitles: settings.motionTitles?.length || 0, voice: Boolean(voicePath), pip: Boolean(pipPath) },
       editor: { sourcePaths, voicePath, pipPath, settings } };
     this.jobs.push(job); this.emitUpdate(); this.pump(); return job;
   }

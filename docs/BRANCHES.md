@@ -3,7 +3,7 @@
 | Branch | Purpose |
 | --- | --- |
 | `release/combined-converter` | Default local workspace: TikTok, Instagram, Both, and gym editor. |
-| `release/editor-studio` | Gym editor and the same local converter profiles. |
+| `release/editor-studio` | Gym editor, Remotion motion titles and JSON edit plans, and the same local converter profiles. |
 | `release/local-uploader` | Single-platform browser uploader with the standard TikTok profile. |
 | `release/telegram-publisher` | Telegram bot, local dashboard, and optional TikTok publishing with the standard TikTok profile. |
 

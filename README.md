@@ -80,7 +80,7 @@ use **Mark In**/**Mark Out**, then add it to the project timeline. The project
 monitor previews the assembled sequence.
 Click **Add all full videos** to join them in import order, or choose any video's
 **In** and **Out** seconds and click **Add range**. You can add the same source
-many times. Click the ruler or scrub bar to place the playhead, press **S** or
+many times. Click the ruler or scrub bar to place the playhead, press **Shift+R** or
 **Split at playhead** to cut a clip, select a clip to set exact In/Out trim points,
 then remove it, drag it to a new position, or use Move left/right. To remove a
 middle section, split at both ends and remove the middle clip. **Clear timeline**
@@ -99,6 +99,42 @@ adjust its volume, and choose where it starts in the timeline.
 The project monitor jumps between source videos during sequence playback. Blur, voice
 start and overlay times use the **merged sequence clock**. Review the finished
 video for missed faces and correct audio timing before sharing.
+
+### Remotion titles and edit plans
+
+The **Motion titles** panel adds animated text at exact points on the merged
+timeline. Set its text, start/end times, position, and color. The project
+monitor previews the title placement. When titles are present, the editor
+renders them with [Remotion](https://www.remotion.dev/docs) onto the edited
+master before sending that master through the existing TikTok and Instagram
+converters. Blur, voice, picture in picture, and cuts keep their existing
+editor controls. Rendering titles requires a local Chromium-based browser;
+the app checks Chrome, Edge, then Brave on Windows. Set
+`REMOTION_BROWSER_PATH` if the browser is installed elsewhere. Untitled edits
+continue through the usual FFmpeg path.
+
+For repeatable edits, click **Generate JSON** in the **Edit plan JSON** panel.
+You can change clip ranges, audio levels, blur rectangles, and motion titles in
+the JSON, then click **Apply JSON**. Import the source videos named in the plan
+in the same order first. **Download plan** saves the JSON file. The browser
+cannot restore local file selections from JSON, so voice and picture in
+picture files must also be selected again.
+
+For a scripted batch render, save the plan beside its source videos (or use
+paths relative to the plan), then run:
+
+```powershell
+npm ci
+npm run editor:plan -- .\gym-edit-plan.json
+```
+
+See [the example plan](examples/gym-edit-plan.json) for the schema. The CLI
+creates a master, TikTok MP4, Instagram MP4, and an outputs JSON in the plan's
+`outputDir` or the configured output folder. It uses the same edit validation,
+Remotion titles, and final conversion profiles as the browser editor. Keep the
+source files and output directory on a drive with enough free space for 4K
+intermediates. `npm ci` installs the pinned Remotion packages; the first title
+render also bundles the composition locally.
 
 The editor first makes a downloadable 60 fps master. Its canvas uses the first
 timeline clip's dimensions; other sources are aspect-preserved and padded to

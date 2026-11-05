@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "sources": ["clip-1.mp4", "clip-2.mp4"],
+  "voice": null,
+  "pip": null,
+  "outputDir": "exports",
+  "settings": {
+    "segments": [
+      {"sourceIndex": 0, "start": 0, "end": 5, "videoEnabled": true, "audioEnabled": true},
+      {"sourceIndex": 1, "start": 2, "end": 7, "videoEnabled": true, "audioEnabled": true}
+    ],
+    "autoFaces": false,
+    "blurRegions": [],
+    "keepClear": null,
+    "originalVolume": 0.25,
+    "voiceVolume": 1,
+    "voiceStart": 0,
+    "pipStart": 0,
+    "pipEnd": 10,
+    "pipWidth": 0.32,
+    "pipPosition": "bottom-right",
+    "motionTitles": [
+      {"text": "Leg day", "start": 0.2, "end": 2.8, "position": "bottom", "color": "#ffffff", "background": true, "fontSize": 72}
+    ],
+    "destination": "both",
+    "encoder": "auto"
+  }
+}

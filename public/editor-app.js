@@ -6,7 +6,7 @@ const source = $('#editor-source'), video = $('#editor-video'), sourceVideo = $(
 const stage = $('#preview-stage'), context = canvas.getContext('2d');
 const voice = $('#voice-file'), voicePreview = $('#voice-preview'), voiceMonitor = $('#voice-monitor'), pip = $('#pip-file'), pipPreview = $('#pip-preview');
 const message = $('#editor-message'), regionsEl = $('#regions'), jobsEl = $('#editor-job-list');
-const state = { regions: [], keepClear: null, tool: 'blur', drag: null, voiceUrl: null, pipUrl: null, duration: 0,
+const state = { regions: [], motionTitles: [], keepClear: null, tool: 'blur', drag: null, voiceUrl: null, pipUrl: null, duration: 0,
   sources: [], segments: [], selectedSegment: 0, selectedTrack: 'video', activeSegment: 0, activeSourceIndex: -1,
   projectTime: 0, seeking: false, pendingSourceTime: null, resumeAfterLoad: false, history: [], future: [] };
 const number = (selector) => Number($(selector).value);
@@ -14,7 +14,8 @@ const clock = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}
 const timecode = (seconds) => `${clock(seconds)}:${String(Math.floor((seconds % 1) * 60)).padStart(2, '0')}`;
 const snapshotTimeline = () => ({ segments: state.segments.map(segment => ({ ...segment })), selectedSegment: state.selectedSegment,
   selectedTrack: state.selectedTrack, projectTime: state.projectTime,
-  regions: state.regions.map(region => ({ ...region })), keepClear: state.keepClear ? { ...state.keepClear } : null });
+  regions: state.regions.map(region => ({ ...region })), keepClear: state.keepClear ? { ...state.keepClear } : null,
+  motionTitles: state.motionTitles.map(title => ({...title})) });
 function rememberTimeline() {
   state.history.push(snapshotTimeline());
   if (state.history.length > 100) state.history.shift();
@@ -25,7 +26,8 @@ function restoreSnapshot(snapshot) {
   state.segments = snapshot.segments.map(segment => ({ ...segment }));
   state.selectedSegment = snapshot.selectedSegment; state.selectedTrack = snapshot.selectedTrack;
   state.regions = snapshot.regions.map(region => ({ ...region })); state.keepClear = snapshot.keepClear;
-  renderRegions(); renderTimeline();
+  state.motionTitles = (snapshot.motionTitles || []).map(title => ({...title}));
+  renderRegions(); renderMotionTitles(); renderTimeline();
   if (state.segments.length) { $('#preview-placeholder').hidden = true; seekProject(Math.min(snapshot.projectTime, state.duration - 0.001)); }
   else { state.projectTime = 0; state.activeSegment = 0; state.activeSourceIndex = -1;
     video.removeAttribute('src'); video.load(); $('#preview-placeholder').hidden = false; updateTimelinePosition(); }
@@ -63,6 +65,30 @@ function redraw() {
   for (const region of state.regions) if (region.start <= state.projectTime && region.end >= state.projectTime) paint(region, 'rgba(255,86,134,0.25)');
   if (state.keepClear) paint(state.keepClear, 'rgba(100,235,185,0.25)');
   if (state.drag) paint(rectBetween(state.drag.start, state.drag.end), state.tool === 'blur' ? 'rgba(255,86,134,0.25)' : 'rgba(100,235,185,0.25)');
+  updateMotionPreview();
+}
+function updateMotionPreview() {
+  const preview = $('#motion-preview');
+  const title = state.motionTitles.find(item => item.start <= state.projectTime && item.end > state.projectTime);
+  preview.replaceChildren();
+  preview.className = title?.position || '';
+  if (!title) return;
+  const label = document.createElement('span'); label.textContent = title.text;
+  label.style.color = title.color;
+  label.style.background = title.background ? 'rgba(0,0,0,.62)' : 'transparent';
+  preview.append(label);
+}
+function renderMotionTitles() {
+  const list = $('#motion-list'); list.replaceChildren();
+  state.motionTitles.forEach((title, index) => {
+    const row = document.createElement('div'); row.className = 'editor-region-row';
+    const label = document.createElement('span'); label.textContent = `${title.text} · ${title.start.toFixed(2)}–${title.end.toFixed(2)}s`;
+    const remove = document.createElement('button'); remove.className = 'queue-button'; remove.type = 'button'; remove.textContent = 'Remove';
+    remove.onclick = () => { rememberTimeline(); state.motionTitles.splice(index, 1); renderMotionTitles(); };
+    row.append(label, remove); list.append(row);
+  });
+  if (!state.motionTitles.length) list.textContent = 'No titles yet.';
+  updateMotionPreview();
 }
 function renderRegions() {
   regionsEl.replaceChildren();
@@ -486,6 +512,78 @@ $('#pip-position').addEventListener('change', syncPreviews);
 $('#pip-start').addEventListener('change', () => { syncPreviews(); renderTimeline(); });
 $('#pip-end').addEventListener('change', () => { syncPreviews(); renderTimeline(); });
 $('#voice-start').addEventListener('change', () => { syncPreviews(); renderTimeline(); });
+$('#motion-add').onclick = () => {
+  const text = $('#motion-text').value.trim(), start = number('#motion-start'), end = number('#motion-end');
+  if (!text || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end > state.duration + 0.1) {
+    message.textContent = 'Enter title text and a valid time range inside the timeline.'; return;
+  }
+  if (state.motionTitles.length >= 30) { message.textContent = 'The edit can hold up to 30 motion titles.'; return; }
+  rememberTimeline();
+  state.motionTitles.push({text, start, end, position: $('#motion-position').value,
+    color: $('#motion-color').value, background: $('#motion-background').checked, fontSize: 72});
+  renderMotionTitles(); message.textContent = 'Motion title added to the sequence.';
+};
+function editSettings(remap) {
+  return {
+    autoFaces: $('#auto-faces').checked, keepClear: state.keepClear, blurRegions: state.regions,
+    segments: state.segments.map(segment => ({ ...segment, sourceIndex: remap ? remap.get(segment.sourceIndex) : segment.sourceIndex })),
+    voiceStart: number('#voice-start'), voiceIn: number('#voice-in'), voiceOut: $('#voice-out').value ? number('#voice-out') : null,
+    voiceVolume: number('#voice-volume') / 100, originalVolume: number('#original-volume') / 100,
+    pipStart: number('#pip-start'), pipEnd: $('#pip-end').value ? number('#pip-end') : state.duration,
+    pipWidth: number('#pip-size') / 100, pipPosition: $('#pip-position').value,
+    motionTitles: state.motionTitles, destination: 'both', encoder: $('#editor-encoder').value
+  };
+}
+function currentPlan() {
+  return {version: 1, sources: state.sources.map(item => item.file.name),
+    voice: voice.files[0]?.name || null, pip: pip.files[0]?.name || null, settings: editSettings()};
+}
+$('#plan-generate').onclick = () => { $('#editor-plan').value = JSON.stringify(currentPlan(), null, 2); message.textContent = 'Edit plan ready. You can change the JSON and apply it.'; };
+$('#plan-download').onclick = () => {
+  const data = $('#editor-plan').value || JSON.stringify(currentPlan(), null, 2);
+  try { JSON.parse(data); } catch { message.textContent = 'Fix the JSON before downloading the plan.'; return; }
+  const url = URL.createObjectURL(new Blob([data], {type: 'application/json'}));
+  const link = document.createElement('a'); link.href = url; link.download = 'gym-edit-plan.json'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$('#plan-apply').onclick = () => {
+  try {
+    const plan = JSON.parse($('#editor-plan').value);
+    if (plan.version !== 1 || !Array.isArray(plan.sources) || plan.sources.length !== state.sources.length ||
+      plan.sources.some((name, index) => name !== state.sources[index].file.name))
+      throw new Error('Import the source videos listed in this plan, in the same order, before applying it.');
+    const settings = plan.settings;
+    if (!settings || !Array.isArray(settings.segments) || !settings.segments.length ||
+      settings.segments.some(segment => !Number.isInteger(segment.sourceIndex) || !state.sources[segment.sourceIndex] ||
+        !Number.isFinite(segment.start) || !Number.isFinite(segment.end) || segment.start < 0 ||
+        segment.end <= segment.start || segment.end > state.sources[segment.sourceIndex].duration + 0.1))
+      throw new Error('The plan contains an invalid timeline clip.');
+    if (!Array.isArray(settings.blurRegions) || !Array.isArray(settings.motionTitles || []) ||
+      (settings.motionTitles || []).some(title => !title || typeof title.text !== 'string' ||
+        !Number.isFinite(title.start) || !Number.isFinite(title.end) || title.end <= title.start ||
+        title.end > timelineDuration(settings.segments) + 0.1))
+      throw new Error('The plan needs valid blur and title lists.');
+    rememberTimeline(); video.pause();
+    state.segments = settings.segments.map(segment => ({...segment}));
+    state.regions = settings.blurRegions.map(region => ({...region}));
+    state.keepClear = settings.keepClear || null;
+    state.motionTitles = (settings.motionTitles || []).map(title => ({...title}));
+    state.selectedSegment = 0; state.selectedTrack = 'video';
+    $('#auto-faces').checked = settings.autoFaces === true;
+    for (const [id, value] of [['#voice-start',settings.voiceStart],['#voice-in',settings.voiceIn],['#voice-out',settings.voiceOut],
+      ['#voice-volume',settings.voiceVolume == null ? null : settings.voiceVolume * 100],
+      ['#original-volume',settings.originalVolume == null ? null : settings.originalVolume * 100],
+      ['#pip-start',settings.pipStart],['#pip-end',settings.pipEnd],['#pip-size',settings.pipWidth == null ? null : settings.pipWidth * 100],
+      ['#pip-position',settings.pipPosition],['#editor-encoder',settings.encoder]]) {
+      $(id).value = value == null ? '' : String(value);
+    }
+    $('#original-level').textContent = `${$('#original-volume').value}%`;
+    $('#voice-level').textContent = `${$('#voice-volume').value}%`;
+    $('#pip-size-label').textContent = `${$('#pip-size').value}%`;
+    renderRegions(); renderMotionTitles(); renderTimeline(); seekProject(0);
+    message.textContent = 'Edit plan applied. Review the sequence and export when ready.';
+  } catch (error) { message.textContent = error.message; }
+};
 function syncPreviews() {
   const active = state.segments[state.activeSegment];
   video.style.visibility = active?.videoEnabled === false ? 'hidden' : 'visible';
@@ -516,16 +614,7 @@ $('#editor-submit').addEventListener('click', async () => {
   if (!state.sources.length || !state.segments.length || !Number.isFinite(state.duration) || !state.duration) { message.textContent = 'Add at least one source range to the timeline first.'; return; }
   const usedSources = [...new Set(state.segments.map(segment => segment.sourceIndex))];
   const uploadIndex = new Map(usedSources.map((sourceIndex, index) => [sourceIndex, index]));
-  const settings = {
-    autoFaces: $('#auto-faces').checked, keepClear: state.keepClear, blurRegions: state.regions,
-    segments: state.segments.map(segment => ({ ...segment, sourceIndex: uploadIndex.get(segment.sourceIndex) })),
-    voiceStart: number('#voice-start'), voiceIn: number('#voice-in'), voiceOut: $('#voice-out').value ? number('#voice-out') : null,
-    voiceVolume: number('#voice-volume') / 100,
-    originalVolume: number('#original-volume') / 100,
-    pipStart: number('#pip-start'), pipEnd: $('#pip-end').value ? number('#pip-end') : state.duration,
-    pipWidth: number('#pip-size') / 100, pipPosition: $('#pip-position').value,
-    destination: 'both', encoder: $('#editor-encoder').value
-  };
+  const settings = editSettings(uploadIndex);
   const form = new FormData();
   for (const index of usedSources) { const item = state.sources[index]; form.append('source', item.file, item.file.name); }
   if (voice.files[0]) form.append('voice', voice.files[0]);
