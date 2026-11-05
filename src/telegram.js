@@ -57,8 +57,8 @@ export async function startTelegram(queue) {
   if ((me.username || "").toLowerCase() !== expectedUsername) {
     throw new Error(`The configured token belongs to @${me.username || "unknown"}, not ${config.botUsername}. The bot was not started.`);
   }
-  bot.command("start", (ctx) => ctx.reply("Send an original video as a File. I accept 1080p60, 2K, 3K, 4K, and any container FFmpeg can read; I will make a 1080×1920, 60fps TikTok export and return it here."));
-  bot.command("profile", (ctx) => ctx.reply("Output: 1080×1920 • 60fps • H.264 MP4 • 10 Mbps target / 12 Mbps max • AAC 256 kbps stereo • half-speed timestamp test mode."));
+  bot.command("start", (ctx) => ctx.reply("Send an original video as a File. I accept 1080p, 2K, 3K, 4K, and any container FFmpeg can read. I will make a vertical 1080×1920 TikTok export and return it here."));
+  bot.command("profile", (ctx) => ctx.reply("Output: 1080×1920 H.264 MP4 • 60 fps / 25 Mb/s and half speed for 60 fps sources • 30 fps / 15 Mb/s and normal speed for lower frame rates • AAC 256 kb/s stereo."));
   bot.command("status", (ctx) => {
     const jobs = queue.snapshot().filter((job) => String(job.chatId) === String(ctx.chat.id));
     const active = jobs.find((job) => job.status === "processing") || jobs.find((job) => job.status === "queued");
@@ -77,7 +77,7 @@ export async function startTelegram(queue) {
       await saveIncoming(bot, media, target);
       const source = await probe(target);
       const job = queue.add({ sourcePath: target, sourceName: media.filename, chatId: ctx.chat.id, messageId: ctx.message.message_id, bytes: media.bytes });
-      await ctx.reply(`Accepted ${source.width}×${source.height} at ${source.fps || "unknown"} fps. Queued #${job.id.slice(0, 8)} with the 1080×1920 60fps profile.`);
+      await ctx.reply(`Accepted ${source.width}×${source.height} at ${source.fps || "unknown"} fps. Queued #${job.id.slice(0, 8)} for vertical 1080×1920 conversion.`);
     } catch (error) {
       console.error("Telegram download failed:", error.message.replaceAll(config.token, "[redacted]"));
       await fs.rm(target, { force: true });

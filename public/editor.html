@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gym Video Editor · Converter</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/welcome.css" />
+  <link rel="stylesheet" href="/editor.css" />
+</head>
+<body class="converter-theme">
+  <main class="editor-page">
+    <nav class="platform-nav" aria-label="Converter"><a href="/tiktok">TikTok converter</a><a href="/instagram">Instagram converter</a><a href="/both">Both platforms</a><a href="/editor" aria-current="page">Gym editor</a></nav>
+    <aside class="welcome-note"><strong>Welcome to your editing workspace.</strong><span>Shape your gym footage, protect background faces, and export for both platforms.</span></aside>
+    <section class="hero"><p class="eyebrow">GYM VIDEO EDITOR</p><h1>Shape the shot.<br><span>Protect the room.</span></h1>
+      <p class="lede">Cut the footage on a multi-track timeline, blur people in the background, mix your voice, and add picture in picture. Your edited master then goes through the combined converter.</p></section>
+
+    <section class="editor-layout">
+      <div class="editor-preview-card">
+        <div class="editor-card-heading"><span class="eyebrow">01 / MEDIA BIN + DUAL MONITORS</span><label class="queue-button editor-file-label">Import videos<input type="file" id="editor-source" accept="video/*,.mov,.mkv,.avi,.webm,.m4v" multiple /></label></div>
+        <div class="editor-bin"><span class="editor-bin-icon">BIN</span><span id="source-details">No videos imported</span><span id="source-metadata">Import as many as your machine can hold</span></div>
+        <div id="project-clips" class="editor-source-list" aria-label="Imported source videos"></div>
+        <div class="editor-bin-trim"><label>Video<select id="bin-source" aria-label="Choose source video"></select></label><label>In (sec)<input id="bin-in" type="number" min="0" step="0.01" value="0" /></label><label>Out (sec)<input id="bin-out" type="number" min="0" step="0.01" value="0" /></label><button id="bin-add" class="queue-button" type="button" disabled>Add range</button><button id="bin-add-all" class="queue-button" type="button" disabled>Add all full videos</button></div>
+        <div class="editor-monitors"><section class="editor-monitor" aria-label="Source monitor"><header><span>SOURCE MONITOR</span><small>Selected media</small></header><div class="editor-source-stage"><video id="source-video" controls playsinline preload="metadata" hidden></video><p id="source-placeholder">Select a video in the bin.</p></div><div class="source-monitor-tools"><button id="source-mark-in" type="button" class="queue-button">Mark In</button><button id="source-mark-out" type="button" class="queue-button">Mark Out</button></div></section><section class="editor-monitor" aria-label="Project monitor"><header><span>PROJECT MONITOR</span><small>Merged timeline</small></header><div class="editor-preview-stage" id="preview-stage"><video id="editor-video" playsinline preload="metadata"></video><video id="pip-preview" muted playsinline hidden></video><canvas id="editor-canvas" aria-label="Drag to mark a blur or keep clear area"></canvas><div id="preview-placeholder">Add ranges to preview your merged sequence.</div></div><div class="editor-timeline"><button id="editor-play" type="button" class="queue-button">Play</button><button id="editor-step-back" type="button" class="queue-button" title="Previous frame" aria-label="Previous frame">−1f</button><button id="editor-step-forward" type="button" class="queue-button" title="Next frame" aria-label="Next frame">+1f</button><span id="editor-time">00:00 / 00:00</span><input id="editor-scrub" type="range" min="0" max="1000" value="0" aria-label="Seek edited timeline" /></div></section></div>
+        <p class="editor-small">Import videos whenever you need them. Add a full video or any In/Out range to the timeline, then split, trim, remove, and rearrange. Draw privacy rectangles on the paused sequence monitor; their times follow the merged timeline.</p>
+      </div>
+
+      <div class="editor-controls">
+        <section class="editor-panel"><span class="eyebrow">02 / FACE PRIVACY</span><h2>Blur people behind you</h2>
+          <label class="editor-toggle"><input id="auto-faces" type="checkbox" checked /> Detect and blur faces automatically</label>
+          <p class="editor-small">Automatic detection blurs every detected face except faces inside your Keep clear rectangle. Side profiles, motion, and small faces may be missed.</p>
+          <p id="face-status" class="editor-small" role="status"></p>
+          <div class="editor-button-row"><button type="button" id="mark-blur" class="queue-button selected">Draw blur area</button><button type="button" id="mark-clear" class="queue-button">Draw Keep clear area</button></div>
+          <div class="editor-range-row"><label>From (seconds)<input id="blur-start" type="number" min="0" step="0.1" value="0" /></label><label>To (seconds)<input id="blur-end" type="number" min="0" step="0.1" placeholder="End of video" /></label></div>
+          <div id="regions" class="editor-regions">No manual blur areas yet.</div>
+        </section>
+        <section class="editor-panel"><span class="eyebrow">03 / SOUND</span><h2>Voice + gym sound</h2>
+          <label class="editor-field">Voice recording (optional)<input id="voice-file" type="file" accept="audio/*,video/*" /></label>
+          <label class="editor-field">Original sound <output id="original-level">25%</output><input id="original-volume" type="range" min="0" max="100" value="25" /></label>
+          <label class="editor-field">Voice level <output id="voice-level">100%</output><input id="voice-volume" type="range" min="0" max="200" value="100" /></label>
+          <label class="editor-field">Voice starts on timeline at second<input id="voice-start" type="number" min="0" step="0.1" value="0" /></label>
+          <div class="voice-edit-view"><span class="eyebrow">VOICE MONITOR / EDIT SOURCE AUDIO</span><audio id="voice-monitor" controls preload="metadata" hidden></audio><audio id="voice-preview" preload="metadata" hidden></audio><div class="editor-range-row"><label>Voice In (sec)<input id="voice-in" type="number" min="0" step="0.01" value="0" /></label><label>Voice Out (sec)<input id="voice-out" type="number" min="0" step="0.01" placeholder="End of recording" /></label></div><div class="editor-button-row"><button id="voice-mark-in" type="button" class="queue-button">Mark In</button><button id="voice-mark-out" type="button" class="queue-button">Mark Out</button></div></div>
+        </section>
+        <section class="editor-panel"><span class="eyebrow">04 / PICTURE IN PICTURE</span><h2>Add another clip</h2>
+          <label class="editor-field">Overlay video (optional)<input id="pip-file" type="file" accept="video/*,.mov,.mkv,.avi,.webm,.m4v" /></label>
+          <div class="editor-range-row"><label>Starts at second<input id="pip-start" type="number" min="0" step="0.1" value="0" /></label><label>Ends at second<input id="pip-end" type="number" min="0" step="0.1" placeholder="End of video" /></label></div>
+          <label class="editor-field">Size <output id="pip-size-label">32%</output><input id="pip-size" type="range" min="15" max="80" value="32" /></label>
+          <label class="editor-field">Corner<select id="pip-position"><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option><option value="top-right">Top right</option><option value="top-left">Top left</option></select></label>
+          <p class="editor-small">Overlay sound is muted. Your original sound and voice settings control the mix.</p>
+        </section>
+        <section class="editor-panel editor-export-panel"><span class="eyebrow">05 / EXPORT</span><h2>Finish in the converter</h2>
+          <p class="editor-small">Every edit creates a 60 fps master, then two 1080 × 1920 H.264 downloads: TikTok at 60 fps / 25 Mb/s with a 2× timeline slowdown, and Instagram at 30 fps / 15 Mb/s at normal speed.</p>
+          <label class="editor-field">Encoder<select id="editor-encoder"><option value="auto">Auto · best available GPU, then CPU</option><option value="cpu">CPU · works everywhere</option><option value="nvidia">NVIDIA NVENC</option><option value="amd">AMD AMF</option></select></label>
+          <div class="editor-small" id="encoder-status">Checking hardware encoders…</div>
+          <button id="editor-submit" type="button" class="editor-primary">Upload and edit video</button><p id="editor-message" class="upload-status" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+    </section>
+    <section class="editor-sequence" aria-label="Video editing timeline">
+      <div class="editor-sequence-heading"><div><p class="eyebrow">TIMELINE / SEQUENCE 01</p><h2>Cut and arrange</h2></div><span id="timeline-summary">Import videos, then add ranges to the timeline</span></div>
+      <div class="editor-sequence-toolbar"><button id="timeline-split" type="button" class="queue-button" disabled>✂ Split <kbd>Shift+R</kbd></button><button id="timeline-unlink" type="button" class="queue-button" disabled>Unlink <kbd>Shift+G</kbd></button><button id="timeline-link" type="button" class="queue-button" disabled>Link <kbd>Shift+L</kbd></button><button id="timeline-remove" type="button" class="queue-button" disabled>Delete selected <kbd>Del</kbd></button><button id="timeline-restore-track" type="button" class="queue-button" disabled>Restore selected track</button><button id="timeline-undo" type="button" class="queue-button" disabled>↶ Revert <kbd>Ctrl+Z</kbd></button><button id="timeline-redo" type="button" class="queue-button" disabled>↷ Redo <kbd>Ctrl+Shift+Z</kbd></button><button id="timeline-left" type="button" class="queue-button" disabled>Move left</button><button id="timeline-right" type="button" class="queue-button" disabled>Move right</button><button id="timeline-restore" type="button" class="queue-button" disabled>Clear timeline</button><label class="timeline-zoom">Zoom<input id="timeline-zoom" type="range" min="4" max="80" value="12" aria-label="Timeline zoom" /></label></div>
+      <div class="editor-clip-trim"><span>Selected clip</span><label>In (sec)<input id="clip-in" type="number" min="0" step="0.01" disabled /></label><label>Out (sec)<input id="clip-out" type="number" min="0" step="0.01" disabled /></label><button id="clip-apply" class="queue-button" type="button" disabled>Apply trim</button></div>
+      <div id="timeline-board" class="editor-sequence-board"><div class="editor-ruler-row"><span class="track-label">TIME</span><div id="timeline-ruler" class="editor-ruler"></div></div><div class="editor-track-row"><span class="track-label">V2 <small>PIP</small></span><div class="track-surface"><div id="timeline-pip" class="track-asset pip-asset"></div></div></div><div class="editor-track-row linked-track"><span class="track-label">V1 <small>VIDEO</small></span><div class="track-surface" id="timeline-footage"><div id="timeline-clips" class="timeline-clips"></div><div id="timeline-playhead" class="timeline-playhead"></div></div></div><div class="editor-track-row linked-track"><span class="track-label">A1 <small>CAMERA AUDIO</small></span><div class="track-surface"><div id="timeline-camera" class="timeline-clips timeline-audio-clips"></div></div></div><div class="editor-track-row"><span class="track-label">A2 <small>VOICE</small></span><div class="track-surface"><div id="timeline-voice" class="track-asset voice-asset"></div></div></div></div>
+      <p class="editor-small">Video (V1) and its camera audio (A1) are directly aligned. Select either row, then unlink with Shift+G to delete only the chosen video or audio; Shift+L links an intact pair again. Shift+R splits at the playhead. Revert undoes timeline edits. Drag clips to reorder and use the voice monitor to trim your recording.</p>
+      <details class="editor-shortcuts"><summary>Keyboard shortcuts</summary><div><span><kbd>Shift+R</kbd> Split at playhead</span><span><kbd>Shift+G</kbd> Unlink selected pair</span><span><kbd>Shift+L</kbd> Link selected pair</span><span><kbd>Delete</kbd> Delete selected track or linked pair</span><span><kbd>Ctrl+Z</kbd> Revert last timeline edit</span><span><kbd>Ctrl+Shift+Z</kbd> Redo</span><span><kbd>← / →</kbd> Step one frame</span><span><kbd>Space</kbd> Play / pause</span></div></details>
+    </section>
+    <section class="jobs-section editor-jobs"><div class="section-heading"><div><p class="eyebrow">LOCAL PROCESSING</p><h2>Edit and exports</h2></div><span class="live"><i></i> LIVE</span></div><div id="editor-empty" class="empty">Your edit and platform exports will appear here.</div><div id="editor-job-list" class="jobs"></div></section>
+    <aside class="note">The edited master uses the first timeline clip's dimensions at 60 fps; other sources are padded to fit. The TikTok export slows the master's video and audio to a 2× timeline. Instagram keeps the master's normal duration while converting to 30 fps. Final H.264 conversion uses CPU libx264; the editor's GPU setting applies to the master. All files stay on this machine.</aside>
+  </main>
+  <script type="module" src="/editor-app.js"></script>
+</body>
+</html>

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { JobQueue } from '../src/queue.js';
 import { config } from '../src/config.js';
 
-test('one source produces distinct TikTok scale-2 and Instagram normal-speed outputs', async () => {
+test('one source produces two named downloads with the shared vertical profile', async () => {
  const folder=await fs.mkdtemp(path.join(os.tmpdir(),'dual-converter-'));
  const previous=config.directories.output; config.directories.output=folder;
  try {
@@ -16,19 +16,19 @@ test('one source produces distinct TikTok scale-2 and Instagram normal-speed out
   assert.equal(fixture.status,0,fixture.stderr?.toString());
   const queue=new JobQueue();
   const finished=new Promise((resolve,reject)=>{queue.on('failed',job=>reject(new Error(job.error)));queue.on('complete',()=>{if(queue.jobs.every(j=>j.status==='complete'))resolve();});});
-  const base={sourcePath:input,sourceName:'source.mp4',bytes:1,origin:'both',groupId:'pair'};
-  const tiktok=queue.add({...base,platform:'tiktok',timestampScale:2});
-  const instagram=queue.add({...base,platform:'instagram'});
+  const [tiktok,instagram]=queue.addCombined({sourcePath:input,sourceName:'source.mp4',bytes:1,groupId:'pair'});
   await finished;
   assert.equal(tiktok.sourcePath,instagram.sourcePath);
+  assert.equal(tiktok.groupId,instagram.groupId);
   assert.notEqual(tiktok.outputPath,instagram.outputPath);
-  assert.equal(tiktok.media.fps,'60/1'); assert.ok(Math.abs(tiktok.media.duration-2)<0.2,`TikTok duration ${tiktok.media.duration}`);
-  assert.equal(instagram.media.fps,'30/1');assert.equal(instagram.media.displayAspectRatio,'9:16');assert.ok(Math.abs(instagram.media.duration-1)<0.2);
-  for(const [job,codec,duration] of [[tiktok,'hevc',2],[instagram,'h264',1]]) {
+  for(const job of [tiktok,instagram]) {
+   assert.equal(job.media.fps,'30/1');assert.equal(job.media.width,1080);assert.equal(job.media.height,1920);
+   assert.equal(job.media.displayAspectRatio,'9:16');assert.equal(job.media.targetVideoBitrateMbps,15);
+   assert.ok(Math.abs(job.media.duration-1)<0.2,`${job.platform} duration ${job.media.duration}`);
    const result=spawnSync(config.ffprobe,['-v','error','-show_streams','-of','json',job.outputPath],{encoding:'utf8',windowsHide:true});
-   const streams=JSON.parse(result.stdout).streams;assert.equal(streams.find(s=>s.codec_type==='video').codec_name,codec);
+   const streams=JSON.parse(result.stdout).streams;assert.equal(streams.find(s=>s.codec_type==='video').codec_name,'h264');
    const audio=streams.find(s=>s.codec_type==='audio');assert.equal(audio.codec_name,'aac');assert.equal(audio.channels,2);assert.equal(audio.sample_rate,'48000');
-   assert.ok(Math.abs(Number(audio.duration)-duration)<0.2,`${job.platform} audio duration ${audio.duration}`);
+   assert.ok(Math.abs(Number(audio.duration)-1)<0.2,`${job.platform} audio duration ${audio.duration}`);
   }
   assert.equal(queue.clearCompleted('both').cleared,2);
  }finally{config.directories.output=previous;await fs.rm(folder,{recursive:true,force:true});}

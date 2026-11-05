@@ -1,19 +1,20 @@
-# Active branches
+# Maintained branches
 
 | Branch | Purpose |
 | --- | --- |
-| `release/editor-studio` | Multitrack gym editor plus TikTok and Instagram exports. |
-| `release/combined-converter` | TikTok and Instagram converter without the editor; default branch. |
-| `release/telegram-publisher` | Dedicated Telegram bot, local dashboard, and optional TikTok publishing workflow. |
-| `release/local-uploader` | Browser-based local upload and TikTok conversion only. |
+| `release/combined-converter` | Default local workspace: TikTok, Instagram, Both, and gym editor. |
+| `release/editor-studio` | Gym editor and the same local converter profiles. |
+| `release/local-uploader` | Single-platform browser uploader with the standard TikTok profile. |
+| `release/telegram-publisher` | Telegram bot, local dashboard, and optional TikTok publishing with the standard TikTok profile. |
 
-All four branches use the same `src/tiktok-preset.js` method from commit
-`6378e68`: `-itsscale 2`, same-resolution 60 fps HEVC at a 20 Mbps target,
-Rec.709 tags, and AAC 256 kbps stereo. Each branch runs the same exact-argument
-and real-output test. Instagram and editor-master exports retain their separate
-presets. The method is fixed in code; conflicting TikTok environment values
-reject startup. GitHub Actions runs the locked-preset test on all four branches.
+All branches use the same final TikTok conversion: 1080 × 1920 H.264, AAC
+256 kb/s stereo, Rec.709. Sources at 45 fps or higher export at 60 fps with a
+25 Mb/s video target and a 2× input timestamp scale. Lower source rates export
+at 30 fps with a 15 Mb/s target and normal duration. On branches with an
+Instagram route, that route always exports 1080 × 1920 H.264 at 30 fps and
+15 Mb/s with normal duration. The editor's working master keeps its separate
+quality and timing before final conversion.
 
-Previous branch tips are preserved as `archive/2026-10-21/*` Git tags. To inspect
-one without changing an active branch, fetch tags and check out its tag in a
-separate worktree. Tags are historical snapshots, not maintained release lines.
+The former `codex/vertical-1080p-fps-bitrate-test` branch is the source of
+this promoted profile. Historical branch tips remain available as
+`archive/2026-10-21/*` tags.

@@ -1,4 +1,4 @@
-name: Locked TikTok preset
+name: Standard converter profile
 
 on:
   push:
@@ -7,12 +7,14 @@ on:
       - release/combined-converter
       - release/telegram-publisher
       - release/local-uploader
+      - codex/vertical-1080p-fps-bitrate-test
   pull_request:
     branches:
       - release/editor-studio
       - release/combined-converter
       - release/telegram-publisher
       - release/local-uploader
+      - codex/vertical-1080p-fps-bitrate-test
 
 jobs:
   check-preset:
@@ -24,4 +26,6 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
-      - run: node --test test/tiktok-preset.test.js
+      - run: node --test test/vertical-profile.test.js
+      - run: node --test test/both.test.js test/audio-tabs.test.js
+        if: ${{ hashFiles('test/both.test.js') != '' }}
