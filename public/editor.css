@@ -41,7 +41,7 @@
 .voice-edit-view { border: 1px solid #413b50; background: #14131d; border-radius: 8px; padding: 10px; }
 .voice-edit-view audio { display: block; width: 100%; margin: 10px 0; }
 .voice-edit-view audio[hidden] { display: none; }
-.editor-bin-trim { display: grid; grid-template-columns: minmax(110px,1.5fr) 70px 70px auto auto; gap: 6px; align-items: end; margin-bottom: 12px; }
+.editor-bin-trim { display: grid; grid-template-columns: minmax(110px,1.5fr) 70px 70px repeat(3,auto); gap: 6px; align-items: end; margin-bottom: 12px; }
 .editor-bin-trim label { display: grid; gap: 4px; color: #aea8bb; font: 9px 'DM Mono',monospace; }
 .editor-bin-trim select,.editor-bin-trim input { width: 100%; min-width: 0; height: 34px; border: 1px solid #544762; border-radius: 5px; background: #14131d; color: #f4edf8; padding: 5px; font: 11px 'DM Mono',monospace; }
 .editor-bin-trim button { min-height: 34px; white-space: nowrap; }
@@ -54,6 +54,11 @@
 .editor-sequence-heading { display: flex; justify-content: space-between; align-items: end; gap: 15px; }
 .editor-sequence-heading h2 { font-size: 22px; }
 .editor-sequence-heading #timeline-summary { font: 11px 'DM Mono',monospace; color: #b4afc7; text-align: right; }
+.timeline-source-dock{margin-top:14px;padding:10px;border:1px solid #3d4050;border-radius:8px;background:#171b27}
+.timeline-source-dock .eyebrow{display:block;margin-bottom:7px}
+#timeline-source-dock{display:flex;gap:7px;overflow-x:auto;min-height:38px;align-items:center;color:#aaa5bd;font-size:11px}
+.timeline-source-chip{flex:none;border:1px solid #71669b;border-radius:6px;background:#302741;color:#f2eaff;padding:7px 10px;cursor:grab;font:11px 'DM Mono',monospace}
+.timeline-source-chip:active{cursor:grabbing}
 .editor-sequence-toolbar { display: flex; flex-wrap: wrap; gap: 7px; margin: 17px 0 12px; }
 .editor-sequence-toolbar .queue-button { padding: 9px 12px; background: #222033; font-size: 11px; }
 .editor-sequence-toolbar .queue-button:not(:disabled):hover { background: #39304e; }
@@ -91,13 +96,19 @@
 .timeline-clip strong,.timeline-clip small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .timeline-clip strong { font-size: 11px; }
 .timeline-clip small { font: 10px 'DM Mono',monospace; color: #ded2f4; }
-.timeline-playhead { position: absolute; top: -34px; height: 190px; width: 2px; background: #ffd06e; pointer-events: none; z-index: 4; box-shadow: 0 0 8px #ffc36b70; }
+.timeline-playhead { position: absolute; top: -34px; height: 242px; width: 2px; background: #ffd06e; pointer-events: none; z-index: 4; box-shadow: 0 0 8px #ffc36b70; }
 .timeline-playhead::before { content: ''; position: absolute; top: -2px; left: -5px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid #ffd06e; }
 .track-asset { position: absolute; inset: 5px 0; }
 .track-asset-block { position: absolute; height: 100%; display: flex; align-items: center; overflow: hidden; white-space: nowrap; padding: 0 8px; border-radius: 3px; font: 10px 'DM Mono',monospace; }
 .camera-asset .track-asset-block { background: #21534f; border: 1px solid #3b9b8e; color: #c5f8ef; }
 .voice-asset .track-asset-block { background: #22546b; border: 1px solid #4aa7c5; color: #caeeff; }
 .pip-asset .track-asset-block { background: #724c49; border: 1px solid #d18779; color: #ffddd6; }
+.timeline-drop-zone.drag-over{outline:2px dashed #e1c5ff;outline-offset:-3px;background:#332943}
+#timeline-extra-audio{min-height:52px;position:relative}
+.timeline-extra-clip{position:absolute;top:4px;height:44px;min-width:10px;overflow:hidden;border:1px solid #50c0a7;border-radius:4px;background:#1d665d;color:#f1fff9;text-align:left;padding:5px 8px;cursor:grab;font:10px 'DM Mono',monospace}
+.timeline-extra-clip.selected{outline:2px solid #dcfff0;outline-offset:-3px;background:#288679}
+.timeline-extra-clip strong,.timeline-extra-clip small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#audio-clip-tools[hidden]{display:none}
 .editor-shortcuts { margin-top: 12px; color: #c8bfd6; font-size: 11px; }
 .editor-shortcuts summary { cursor: pointer; font-weight: 700; }
 .editor-shortcuts div { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin-top: 10px; }

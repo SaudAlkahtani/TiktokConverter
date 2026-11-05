@@ -59,12 +59,37 @@ export function validateEditSettings(raw, sourceDurations) {
     const sourceDuration = durations[sourceIndex];
     const start = between(segment.start, 0, sourceDuration, `Timeline clip ${index + 1} start`);
     const end = Math.min(sourceDuration, between(segment.end, start, sourceDuration + 0.1, `Timeline clip ${index + 1} end`));
-    if (end - start < 0.08) throw new Error(`Timeline clip ${index + 1} must be at least 0.08 seconds long.`);
     const videoEnabled = segment.videoEnabled !== false, audioEnabled = segment.audioEnabled !== false;
-    if (!videoEnabled && !audioEnabled) throw new Error(`Timeline clip ${index + 1} has neither video nor audio.`);
-    return { sourceIndex, start: decimal(start), end: decimal(end), videoEnabled, audioEnabled };
+    const preserveGap = segment.preserveGap === true;
+    if (end - start < (preserveGap ? 0.001 : 0.08)) throw new Error(`Timeline clip ${index + 1} is too short.`);
+    if (!videoEnabled && !audioEnabled && !preserveGap) throw new Error(`Timeline clip ${index + 1} has neither video nor audio.`);
+    return { sourceIndex, start: decimal(start), end: decimal(end), videoEnabled, audioEnabled, preserveGap };
   });
-  const duration = segments.reduce((total, segment) => total + segment.end - segment.start, 0);
+  const baseDuration = segments.reduce((total, segment) => total + segment.end - segment.start, 0);
+  const rawAudioClips = raw.audioClips ?? [];
+  if (!Array.isArray(rawAudioClips)) throw new Error('The extra audio track must be a list of clips.');
+  const audioClips = rawAudioClips.map((clip, index) => {
+    if (!clip || typeof clip !== 'object' || Array.isArray(clip)) throw new Error(`Audio clip ${index + 1} is invalid.`);
+    const sourceIndex = Number(clip.sourceIndex);
+    if (!Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex >= durations.length) throw new Error(`Audio clip ${index + 1} refers to an unknown source.`);
+    if (Array.isArray(sourceDurations) && sourceDurations[sourceIndex]?.hasAudio === false) throw new Error(`Audio clip ${index + 1} source has no audio.`);
+    const start = between(clip.start, 0, durations[sourceIndex], `Audio clip ${index + 1} start`);
+    const end = between(clip.end, start + 0.08, durations[sourceIndex] + 0.001, `Audio clip ${index + 1} end`);
+    const timelineStart = between(clip.timelineStart, 0, Number.MAX_SAFE_INTEGER, `Audio clip ${index + 1} timeline position`);
+    return { sourceIndex, start: decimal(start), end: decimal(Math.min(end, durations[sourceIndex])),
+      timelineStart: decimal(timelineStart), volume: between(clip.volume ?? 1, 0, 2, `Audio clip ${index + 1} volume`) };
+  });
+  const duration = Math.max(baseDuration, ...audioClips.map(clip => clip.timelineStart + clip.end - clip.start));
+  if (duration > baseDuration + 0.0001) {
+    const gap = duration - baseDuration;
+    // Keep the full detached audio even when the visible video ends earlier.
+    for (let remaining = gap; remaining > 0.0001;) {
+      const length = Math.min(remaining, durations[0]);
+      segments.push({sourceIndex: 0, start: 0, end: decimal(length), videoEnabled: false,
+        audioEnabled: false, preserveGap: true});
+      remaining -= length;
+    }
+  }
   const blurRegions = raw.blurRegions.map((region, index) => {
     const bounds = rectangle(region, `Blur region ${index + 1}`);
     const start = between(region.start, 0, duration, 'Blur start');
@@ -102,7 +127,7 @@ export function validateEditSettings(raw, sourceDurations) {
   });
   return {
     autoFaces: raw.autoFaces === true,
-    keepClear, blurRegions, segments,
+    keepClear, blurRegions, segments, audioClips,
     voiceStart: decimal(voiceStart), voiceIn: decimal(voiceIn), voiceOut: voiceOut == null ? null : decimal(voiceOut),
     voiceVolume: between(raw.voiceVolume ?? 1, 0, 2, 'Voice volume'),
     originalVolume: between(raw.originalVolume ?? 0.25, 0, 1, 'Original sound'),
@@ -176,12 +201,17 @@ const rectPixels = (region, width, height) => ({
   w: Math.max(2, Math.round(region.w * width)), h: Math.max(2, Math.round(region.h * height))
 });
 
-export function buildEditArgs({ input, output, voicePath, pipPath, maskPath, media, pipMedia, settings, videoEncoder }) {
+export function buildEditArgs({ input, inputPaths = [], output, voicePath, pipPath, maskPath, media, pipMedia, settings, videoEncoder }) {
   const args = ['-hide_banner', '-y', '-i', input];
   let next = 1, maskIndex = -1, voiceIndex = -1, pipIndex = -1;
   if (maskPath) { maskIndex = next++; args.push('-i', maskPath); }
   if (voicePath) { voiceIndex = next++; args.push('-i', voicePath); }
   if (pipPath) { pipIndex = next++; args.push('-i', pipPath); }
+  const audioSources = new Map();
+  for (const clip of settings.audioClips || []) if (!audioSources.has(clip.sourceIndex)) {
+    audioSources.set(clip.sourceIndex, next++);
+    args.push('-i', inputPaths[clip.sourceIndex]);
+  }
   const hdr = ['smpte2084', 'arib-std-b67'].includes(media.colorTransfer);
   const tonemap = hdr ? `zscale=pin=${media.colorPrimaries || 'bt2020'}:tin=${media.colorTransfer}:min=${media.colorSpace || 'bt2020nc'}:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=mobius:desat=2,zscale=t=bt709:m=bt709:r=limited,` : '';
   const video = [`[0:v]fps=60,${tonemap}setsar=1,format=yuv420p`];
@@ -212,11 +242,25 @@ export function buildEditArgs({ input, output, voicePath, pipPath, maskPath, med
   }
   const audio = [];
   if (media.hasAudio) audio.push(`[0:a]volume=${settings.originalVolume},aformat=channel_layouts=stereo,apad,atrim=duration=${media.duration}[original]`);
-  if (voicePath) audio.push(`[${voiceIndex}:a]atrim=start=${settings.voiceIn ?? 0}${settings.voiceOut == null ? '' : `:end=${settings.voiceOut}`},asetpts=PTS-STARTPTS,volume=${settings.voiceVolume},aformat=channel_layouts=stereo,adelay=${Math.round(settings.voiceStart * 1000)}:all=1,apad,atrim=duration=${media.duration}[voice]`);
-  let audioLabel = null;
-  if (media.hasAudio && voicePath) { audio.push('[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mixed]'); audioLabel = 'mixed'; }
-  else if (media.hasAudio) audioLabel = 'original';
-  else if (voicePath) audioLabel = 'voice';
+  if (voicePath) audio.push(`[${voiceIndex}:a]atrim=start=${settings.voiceIn ?? 0}${settings.voiceOut == null ? '' : `:end=${settings.voiceOut}`},asetpts=PTS-STARTPTS,volume=${settings.voiceVolume},aformat=channel_layouts=stereo,adelay=${Math.round(settings.voiceStart * 1000)}:all=1,apad[voice]`);
+  const grouped = new Map();
+  for (const [index, clip] of (settings.audioClips || []).entries()) {
+    if (!grouped.has(clip.sourceIndex)) grouped.set(clip.sourceIndex, []);
+    grouped.get(clip.sourceIndex).push(index);
+  }
+  for (const [sourceIndex, indices] of grouped) if (indices.length > 1)
+    audio.push(`[${audioSources.get(sourceIndex)}:a]asplit=${indices.length}${indices.map(index => `[rawextra${index}]`).join('')}`);
+  for (const [index, clip] of (settings.audioClips || []).entries()) {
+    const raw = grouped.get(clip.sourceIndex).length > 1 ? `rawextra${index}` : `${audioSources.get(clip.sourceIndex)}:a`;
+    audio.push(`[${raw}]atrim=start=${clip.start}:end=${clip.end},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,volume=${clip.volume},adelay=${Math.round(clip.timelineStart * 1000)}:all=1,apad[extra${index}]`);
+  }
+  const audioLabels = [media.hasAudio ? 'original' : null, voicePath ? 'voice' : null,
+    ...(settings.audioClips || []).map((_, index) => `extra${index}`)].filter(Boolean);
+  let audioLabel = audioLabels[0] || null;
+  if (audioLabels.length > 1) {
+    audio.push(`${audioLabels.map(label => `[${label}]`).join('')}amix=inputs=${audioLabels.length}:duration=first:dropout_transition=0:normalize=0[mixed]`);
+    audioLabel = 'mixed';
+  }
   args.push('-filter_complex', [...video, ...audio].join(';'), '-map', `[${videoLabel}]`);
   if (audioLabel) args.push('-map', `[${audioLabel}]`);
   args.push('-c:v', videoEncoder, '-b:v', '60M', '-maxrate', '80M', '-bufsize', '120M',
@@ -314,6 +358,8 @@ export async function renderEdit({ input, inputPaths, output, voicePath, pipPath
   const baseProgress = value => onProgress(settings.motionTitles?.length ? Math.round(value * 0.7) : value);
   const inputs = inputPaths || [input];
   const sourceMedia = await probeSources(inputs);
+  for (const [index, clip] of (settings.audioClips || []).entries())
+    if (!sourceMedia[clip.sourceIndex]?.hasAudio) throw new Error(`Audio clip ${index + 1} source has no audio.`);
   const sourceColorChecks = sourceMedia.map((item, index) => assertColorInput(item, { allowHdr: true, label: `Source ${index + 1}` }));
   const segments = settings.segments || [{ sourceIndex: 0, start: 0, end: sourceMedia[0].duration }];
   const expectedDuration = segments.reduce((total, segment) => total + segment.end - segment.start, 0);
@@ -332,7 +378,7 @@ export async function renderEdit({ input, inputPaths, output, voicePath, pipPath
       workInput = sequencePath; media = await probe(sequencePath); baseProgress(40);
     }
     if (maskPath) { await createFaceMask(workInput, maskPath, media, settings, signal); baseProgress(fullFirstClip ? 15 : 55); }
-    const args = buildEditArgs({ input: workInput, output, voicePath, pipPath, maskPath, media, pipMedia, settings, videoEncoder: selected.encoder });
+    const args = buildEditArgs({ input: workInput, inputPaths: inputs, output, voicePath, pipPath, maskPath, media, pipMedia, settings, videoEncoder: selected.encoder });
     const base = fullFirstClip ? 15 : settings.autoFaces ? 55 : 40;
     await runProcess(config.ffmpeg, args, signal, (value) => baseProgress(base + Math.round(value * (100 - base) / 100)), expectedDuration);
     let result = await probe(output);

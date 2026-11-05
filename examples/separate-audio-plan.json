@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "sources": ["exercise-video.mp4", "voice-from-video.mp4"],
+  "voice": null,
+  "pip": null,
+  "outputDir": "exports",
+  "settings": {
+    "segments": [
+      {"sourceIndex": 0, "start": 0, "end": 4, "videoEnabled": true, "audioEnabled": false},
+      {"sourceIndex": 0, "start": 4, "end": 10, "videoEnabled": false, "audioEnabled": false, "preserveGap": true}
+    ],
+    "audioClips": [
+      {"sourceIndex": 1, "start": 0, "end": 10, "timelineStart": 0, "volume": 1}
+    ],
+    "autoFaces": false,
+    "blurRegions": [],
+    "originalVolume": 0,
+    "motionTitles": [],
+    "destination": "both",
+    "encoder": "auto"
+  }
+}

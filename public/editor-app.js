@@ -1,5 +1,6 @@
 import { setupNavigation } from './navigation.js';
 import { deleteTimelineTrack, linkTimelineSegment, locateTimelineTime, moveTimelineSegment, moveTimelineSegmentTo, restoreTimelineTrack, splitTimelineSegment, timelineDuration, timelineOffset, trimTimelineSegment, unlinkTimelineSegment } from './editor-timeline.js';
+import {audioEnd, extendWithGap, moveAudioClip, splitAudioClip} from './editor-audio.js';
 
 const $ = (selector) => document.querySelector(selector);
 const source = $('#editor-source'), video = $('#editor-video'), sourceVideo = $('#source-video'), canvas = $('#editor-canvas');
@@ -7,13 +8,15 @@ const stage = $('#preview-stage'), context = canvas.getContext('2d');
 const voice = $('#voice-file'), voicePreview = $('#voice-preview'), voiceMonitor = $('#voice-monitor'), pip = $('#pip-file'), pipPreview = $('#pip-preview');
 const message = $('#editor-message'), regionsEl = $('#regions'), jobsEl = $('#editor-job-list');
 const state = { regions: [], motionTitles: [], keepClear: null, tool: 'blur', drag: null, voiceUrl: null, pipUrl: null, duration: 0,
-  sources: [], segments: [], selectedSegment: 0, selectedTrack: 'video', activeSegment: 0, activeSourceIndex: -1,
+  sources: [], segments: [], extraAudioClips: [], audioPlayers: new Map(), selectedAudioId: null,
+  selectedSegment: 0, selectedTrack: 'video', activeSegment: 0, activeSourceIndex: -1,
   projectTime: 0, seeking: false, pendingSourceTime: null, resumeAfterLoad: false, history: [], future: [] };
 const number = (selector) => Number($(selector).value);
 const clock = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const timecode = (seconds) => `${clock(seconds)}:${String(Math.floor((seconds % 1) * 60)).padStart(2, '0')}`;
 const snapshotTimeline = () => ({ segments: state.segments.map(segment => ({ ...segment })), selectedSegment: state.selectedSegment,
-  selectedTrack: state.selectedTrack, projectTime: state.projectTime,
+  selectedTrack: state.selectedTrack, selectedAudioId: state.selectedAudioId, projectTime: state.projectTime,
+  extraAudioClips: state.extraAudioClips.map(clip => ({...clip})),
   regions: state.regions.map(region => ({ ...region })), keepClear: state.keepClear ? { ...state.keepClear } : null,
   motionTitles: state.motionTitles.map(title => ({...title})) });
 function rememberTimeline() {
@@ -25,6 +28,8 @@ function restoreSnapshot(snapshot) {
   video.pause();
   state.segments = snapshot.segments.map(segment => ({ ...segment }));
   state.selectedSegment = snapshot.selectedSegment; state.selectedTrack = snapshot.selectedTrack;
+  state.selectedAudioId = snapshot.selectedAudioId || null;
+  state.extraAudioClips = (snapshot.extraAudioClips || []).map(clip => ({...clip}));
   state.regions = snapshot.regions.map(region => ({ ...region })); state.keepClear = snapshot.keepClear;
   state.motionTitles = (snapshot.motionTitles || []).map(title => ({...title}));
   renderRegions(); renderMotionTitles(); renderTimeline();
@@ -122,21 +127,38 @@ function inspectSource(url) {
   });
 }
 function renderBin() {
-  const list = $('#project-clips'), selector = $('#bin-source');
-  list.replaceChildren(); selector.replaceChildren();
+  const list = $('#project-clips'), selector = $('#bin-source'), dock = $('#timeline-source-dock');
+  list.replaceChildren(); selector.replaceChildren(); dock.replaceChildren();
   state.sources.forEach((item, index) => {
     const option = document.createElement('option'); option.value = String(index); option.textContent = item.file.name; selector.append(option);
-    const row = document.createElement('button'); row.type = 'button'; row.className = 'editor-source-item';
+    const row = document.createElement('div'); row.className = 'editor-source-item';
+    row.setAttribute('role', 'button'); row.tabIndex = 0;
     const name = document.createElement('strong'); name.textContent = `${index + 1}. ${item.file.name}`;
     const detail = document.createElement('small'); detail.textContent = `${item.width}×${item.height} · ${timecode(item.duration)}`;
     row.append(name, detail);
     row.onclick = () => { selector.value = String(index); updateBinRange(); };
+    row.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); row.click(); } };
+    row.draggable = true;
+    row.title = 'Drag to V1 for picture and camera audio, or A2 for audio alone.';
+    const dragSource = event => {
+      event.dataTransfer.effectAllowed = 'copy';
+      event.dataTransfer.setData('application/x-gym-source-index', String(index));
+    };
+    row.addEventListener('dragstart', dragSource);
     list.append(row);
+    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'timeline-source-chip';
+    chip.textContent = `${index + 1}. ${item.file.name}`;
+    chip.title = 'Drag to V1 for video and audio, or A2 for audio alone.';
+    chip.draggable = true; chip.addEventListener('dragstart', dragSource);
+    chip.onclick = () => { selector.value = String(index); updateBinRange(); };
+    dock.append(chip);
   });
+  if (!state.sources.length) dock.textContent = 'Import videos above to fill this pool.';
   $('#source-details').textContent = state.sources.length ? `${state.sources.length} video${state.sources.length === 1 ? '' : 's'} imported` : 'No videos imported';
   $('#source-metadata').textContent = `${state.sources.length} sources`;
   $('#bin-add').disabled = !state.sources.length;
   $('#bin-add-all').disabled = !state.sources.length;
+  $('#bin-add-audio').disabled = !state.sources.length;
   if (state.sources.length) { selector.value = String(state.sources.length - 1); updateBinRange(); }
 }
 function updateBinRange() {
@@ -152,10 +174,76 @@ function addClips(clips) {
   if (!clips.length) return;
   rememberTimeline();
   state.segments.push(...clips);
-  state.selectedSegment = state.segments.length - clips.length; state.selectedTrack = 'video';
+  state.selectedSegment = state.segments.length - clips.length; state.selectedTrack = 'video'; state.selectedAudioId = null;
   renderTimeline(); seekProject(timelineOffset(state.segments, state.selectedSegment));
   $('#preview-placeholder').hidden = true;
   message.textContent = `Added ${clips.length} clip${clips.length === 1 ? '' : 's'} to the merged timeline.`;
+}
+function addAudioFromSource(sourceIndex, start = 0, end = state.sources[sourceIndex]?.duration, timelineStart = state.projectTime) {
+  const item = state.sources[sourceIndex];
+  if (!item || !Number.isFinite(start) || !Number.isFinite(end) || end - start < .08) return;
+  rememberTimeline(); video.pause();
+  const clip = {id: crypto.randomUUID(), sourceIndex, start: Number(start.toFixed(4)),
+    end: Number(Math.min(end, item.duration).toFixed(4)), timelineStart: Number(Math.max(0, timelineStart).toFixed(4)), volume: 1};
+  state.extraAudioClips.push(clip);
+  state.segments = extendWithGap(state.segments, audioEnd(clip), sourceIndex, item.duration);
+  state.selectedAudioId = clip.id; state.selectedTrack = 'extra-audio';
+  renderTimeline(); seekProject(Math.min(clip.timelineStart, state.duration - .001));
+  message.textContent = `Added ${item.file.name} audio on A2. Select it to split, trim, move, or delete it independently.`;
+}
+function insertVideoFromSource(sourceIndex, position) {
+  const item = state.sources[sourceIndex];
+  if (!item || item.duration < .08) return;
+  const clip = {sourceIndex, start: 0, end: Number(item.duration.toFixed(4)),
+    videoEnabled: true, audioEnabled: true, linked: true};
+  if (!state.segments.length || position >= timelineDuration(state.segments) - .08) { addClips([clip]); return; }
+  const point = locateTimelineTime(state.segments, position);
+  let next = state.segments, index = point.index;
+  const left = point.sourceTime - next[index].start, right = next[index].end - point.sourceTime;
+  if (left >= .08 && right >= .08) {
+    next = splitTimelineSegment(next, index, point.sourceTime);
+    index++;
+  } else if (left >= .08) index++;
+  rememberTimeline(); video.pause();
+  state.segments = [...next.slice(0, index), clip, ...next.slice(index)];
+  for (const audio of state.extraAudioClips) if (audio.timelineStart >= position) audio.timelineStart += clip.end;
+  state.selectedSegment = index; state.selectedTrack = 'video'; state.selectedAudioId = null;
+  renderTimeline(); seekProject(timelineOffset(state.segments, index));
+  message.textContent = `Inserted ${item.file.name} on V1 with its camera audio on A1.`;
+}
+const dropPosition = event => {
+  const total = timelineDuration(state.segments);
+  const rect = event.currentTarget.getBoundingClientRect();
+  return total * Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+};
+for (const [selector, track] of [['#timeline-footage', 'video'], ['#timeline-extra-audio', 'extra-audio']]) {
+  const surface = $(selector);
+  surface.addEventListener('dragover', event => {
+    if (![...event.dataTransfer.types].some(type => ['application/x-gym-source-index', 'application/x-gym-audio-id'].includes(type))) return;
+    event.preventDefault(); surface.classList.add('drag-over');
+  });
+  surface.addEventListener('dragleave', event => { if (!surface.contains(event.relatedTarget)) surface.classList.remove('drag-over'); });
+  surface.addEventListener('drop', event => {
+    surface.classList.remove('drag-over');
+    const sourceIndex = event.dataTransfer.getData('application/x-gym-source-index');
+    const audioId = event.dataTransfer.getData('application/x-gym-audio-id');
+    if (sourceIndex) {
+      event.preventDefault();
+      const position = dropPosition(event);
+      if (track === 'video') insertVideoFromSource(Number(sourceIndex), position);
+      else addAudioFromSource(Number(sourceIndex), 0, state.sources[Number(sourceIndex)]?.duration, position);
+    } else if (audioId && track === 'extra-audio') {
+      event.preventDefault();
+      const grabOffset = Number(event.dataTransfer.getData('application/x-gym-audio-grab-offset')) || 0;
+      const next = moveAudioClip(state.extraAudioClips, audioId, Math.max(0, dropPosition(event) - grabOffset));
+      if (!next) return;
+      rememberTimeline(); state.extraAudioClips = next;
+      const clip = next.find(item => item.id === audioId);
+      state.segments = extendWithGap(state.segments, audioEnd(clip), clip.sourceIndex, state.sources[clip.sourceIndex].duration);
+      state.selectedTrack = 'extra-audio'; state.selectedAudioId = audioId; renderTimeline();
+      message.textContent = 'Moved the A2 audio clip.';
+    }
+  });
 }
 function updateTimelinePosition() {
   const duration = timelineDuration(state.segments);
@@ -193,14 +281,52 @@ function renderTrack(id, label, start, end) {
   track.append(block);
 }
 function updateSelectedTrim() {
+  const extra = state.selectedTrack === 'extra-audio' ? state.extraAudioClips.find(clip => clip.id === state.selectedAudioId) : null;
+  $('#audio-clip-tools').hidden = !extra;
+  if (extra) {
+    $('#audio-clip-in').value = String(extra.start);
+    $('#audio-clip-out').value = String(extra.end);
+    $('#audio-clip-position').value = String(extra.timelineStart);
+    $('#audio-clip-volume').value = String(Math.round(extra.volume * 100));
+    $('#audio-clip-in').max = String(state.sources[extra.sourceIndex].duration);
+    $('#audio-clip-out').max = String(state.sources[extra.sourceIndex].duration);
+  }
   const segment = state.segments[state.selectedSegment];
-  const enabled = Boolean(segment);
+  const enabled = Boolean(segment) && !extra;
   for (const id of ['#clip-in', '#clip-out', '#clip-apply']) $(id).disabled = !enabled;
   $('#clip-in').value = enabled ? String(segment.start) : '';
   $('#clip-out').value = enabled ? String(segment.end) : '';
   if (enabled) {
     const duration = state.sources[segment.sourceIndex].duration;
     $('#clip-in').max = String(duration); $('#clip-out').max = String(duration);
+  }
+}
+function renderExtraAudioTrack(total) {
+  const track = $('#timeline-extra-audio'); track.replaceChildren();
+  for (const clip of state.extraAudioClips) {
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = `timeline-extra-clip${clip.id === state.selectedAudioId && state.selectedTrack === 'extra-audio' ? ' selected' : ''}`;
+    button.style.left = `${clip.timelineStart / total * 100}%`;
+    button.style.width = `${(clip.end - clip.start) / total * 100}%`;
+    button.title = `${state.sources[clip.sourceIndex]?.file.name || 'Source'} audio, ${timecode(clip.start)}–${timecode(clip.end)}, starts at ${timecode(clip.timelineStart)}`;
+    button.setAttribute('aria-label', button.title);
+    const label = document.createElement('strong'); label.textContent = `♫ ${state.sources[clip.sourceIndex]?.file.name || 'Audio'}`;
+    const times = document.createElement('small'); times.textContent = `${timecode(clip.timelineStart)} · ${timecode(clip.end - clip.start)}`;
+    button.append(label, times);
+    button.draggable = true;
+    button.addEventListener('dragstart', event => {
+      event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-gym-audio-id', clip.id);
+      const rect = button.getBoundingClientRect();
+      const grabOffset = (event.clientX - rect.left) / rect.width * (clip.end - clip.start);
+      event.dataTransfer.setData('application/x-gym-audio-grab-offset', String(Math.max(0, grabOffset)));
+    });
+    button.onclick = event => {
+      video.pause(); state.selectedTrack = 'extra-audio'; state.selectedAudioId = clip.id;
+      const rect = button.getBoundingClientRect();
+      const fraction = Math.max(0, Math.min(.999, (event.clientX - rect.left) / rect.width));
+      seekProject(clip.timelineStart + fraction * (clip.end - clip.start)); renderTimeline();
+    };
+    track.append(button);
   }
 }
 function renderTimeline() {
@@ -244,7 +370,7 @@ function renderTimeline() {
     const sourceName = state.sources[segment.sourceIndex]?.file.name || 'Source video';
     for (const [track, container] of [['video', clips], ['audio', camera]]) {
       const enabled = track === 'video' ? segment.videoEnabled !== false : segment.audioEnabled !== false;
-      const active = index === state.selectedSegment && (segment.linked !== false || state.selectedTrack === track);
+      const active = state.selectedTrack !== 'extra-audio' && index === state.selectedSegment && (segment.linked !== false || state.selectedTrack === track);
       const clip = document.createElement('button'); clip.type = 'button';
       clip.className = `timeline-clip${track === 'audio' ? ' timeline-audio-clip' : ''}${active ? ' selected' : ''}${segment.linked !== false ? ' paired' : ''}${enabled ? '' : ' missing'}`;
       clip.style.flexGrow = String(segment.end - segment.start); clip.style.flexBasis = '0';
@@ -267,7 +393,7 @@ function renderTimeline() {
         renderTimeline(); seekProject(timelineOffset(next, index));
       });
       clip.onclick = event => {
-        video.pause(); state.selectedSegment = index; state.selectedTrack = track;
+        video.pause(); state.selectedSegment = index; state.selectedTrack = track; state.selectedAudioId = null;
         const rect = clip.getBoundingClientRect();
         const fraction = Math.max(0, Math.min(0.999, (event.clientX - rect.left) / rect.width));
         seekProject(offsets[index] + fraction * (segment.end - segment.start)); renderTimeline();
@@ -275,25 +401,31 @@ function renderTimeline() {
       container.append(clip);
     }
   });
+  if (total) renderExtraAudioTrack(total);
+  else $('#timeline-extra-audio').replaceChildren();
   const voiceLength = number('#voice-out') || voiceMonitor.duration || state.duration;
   renderTrack('#timeline-voice', 'Voice', voice.files[0] ? number('#voice-start') : state.duration,
     voice.files[0] ? Math.min(state.duration, number('#voice-start') + Math.max(0, voiceLength - number('#voice-in'))) : state.duration);
   renderTrack('#timeline-pip', 'Overlay', pip.files[0] ? number('#pip-start') : state.duration,
     $('#pip-end').value ? number('#pip-end') : state.duration);
-  $('#timeline-summary').textContent = total ? `${state.sources.length} source${state.sources.length === 1 ? '' : 's'} · ${state.segments.length} clips · ${timecode(total)} sequence` : 'Import videos, then add ranges to the timeline';
-  $('#timeline-split').disabled = !total;
-  $('#timeline-remove').disabled = !total;
+  const visibleVideoCount = state.segments.filter(segment => segment.videoEnabled !== false).length;
+  $('#timeline-summary').textContent = total ? `${state.sources.length} source${state.sources.length === 1 ? '' : 's'} · ${visibleVideoCount} video clips · ${state.extraAudioClips.length} A2 audio clips · ${timecode(total)} sequence` : 'Import videos, then add ranges to the timeline';
+  const extraSelected = state.selectedTrack === 'extra-audio' && state.extraAudioClips.some(clip => clip.id === state.selectedAudioId);
+  $('#timeline-split').disabled = !total || (state.selectedTrack === 'extra-audio' && !extraSelected);
+  $('#timeline-remove').disabled = !total || (state.selectedTrack === 'extra-audio' && !extraSelected);
   const selected = state.segments[state.selectedSegment];
-  $('#timeline-unlink').disabled = !selected || selected.linked === false;
-  $('#timeline-link').disabled = !selected || selected.linked !== false || selected.videoEnabled === false || selected.audioEnabled === false;
-  $('#timeline-restore-track').disabled = !selected || (state.selectedTrack === 'video' ? selected.videoEnabled !== false : selected.audioEnabled !== false);
+  $('#timeline-unlink').disabled = extraSelected || !selected || selected.linked === false;
+  $('#timeline-detach-audio').disabled = extraSelected || !selected || selected.audioEnabled === false;
+  $('#timeline-link').disabled = extraSelected || !selected || selected.linked !== false || selected.videoEnabled === false || selected.audioEnabled === false;
+  $('#timeline-restore-track').disabled = extraSelected || !selected || (state.selectedTrack === 'video' ? selected.videoEnabled !== false : selected.audioEnabled !== false);
   $('#timeline-undo').disabled = !state.history.length;
   $('#timeline-redo').disabled = !state.future.length;
-  $('#timeline-left').disabled = state.selectedSegment <= 0;
-  $('#timeline-right').disabled = state.selectedSegment >= state.segments.length - 1;
+  $('#timeline-left').disabled = extraSelected || state.selectedSegment <= 0;
+  $('#timeline-right').disabled = extraSelected || state.selectedSegment >= state.segments.length - 1;
   $('#timeline-restore').disabled = !total;
   $('#bin-add').disabled = !state.sources.length;
   $('#bin-add-all').disabled = !state.sources.length;
+  $('#bin-add-audio').disabled = !state.sources.length;
   updateSelectedTrim();
   updateTimelinePosition();
 }
@@ -350,6 +482,15 @@ $('#bin-add-all').onclick = () => {
   if (!clips.length) { message.textContent = 'Import a video that is at least 0.08 seconds long.'; return; }
   addClips(clips);
 };
+$('#bin-add-audio').onclick = () => {
+  const sourceIndex = Number($('#bin-source').value), item = state.sources[sourceIndex];
+  if (!item) return;
+  const start = number('#bin-in'), end = number('#bin-out');
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > item.duration + .05 || end - start < .08) {
+    message.textContent = 'Choose a valid audio In/Out range in the selected video.'; return;
+  }
+  addAudioFromSource(sourceIndex, start, end, state.projectTime);
+};
 $('#source-mark-in').onclick = () => { if (state.sources.length) $('#bin-in').value = String(Number(sourceVideo.currentTime.toFixed(4))); };
 $('#source-mark-out').onclick = () => { if (state.sources.length) $('#bin-out').value = String(Number(sourceVideo.currentTime.toFixed(4))); };
 video.addEventListener('loadedmetadata', () => {
@@ -392,6 +533,13 @@ $('#timeline-ruler').addEventListener('click', (event) => {
 $('#timeline-split').onclick = () => {
   if (!state.segments.length) return;
   video.pause();
+  if (state.selectedTrack === 'extra-audio') {
+    const nextAudio = splitAudioClip(state.extraAudioClips, state.selectedAudioId, state.projectTime);
+    if (!nextAudio) { message.textContent = 'Move the playhead at least 0.08 seconds inside the selected A2 audio clip.'; return; }
+    rememberTimeline(); state.extraAudioClips = nextAudio;
+    state.selectedAudioId = nextAudio.find(clip => clip.timelineStart === Number(state.projectTime.toFixed(4)))?.id || state.selectedAudioId;
+    renderTimeline(); message.textContent = 'Split only the A2 audio clip. Video remains unchanged.'; return;
+  }
   const point = locateTimelineTime(state.segments, state.projectTime);
   const next = splitTimelineSegment(state.segments, point.index, point.sourceTime);
   if (!next) { message.textContent = 'Move the playhead at least 0.08 seconds inside a clip before splitting.'; return; }
@@ -400,6 +548,14 @@ $('#timeline-split').onclick = () => {
   seekProject(state.projectTime); renderTimeline(); message.textContent = `Split created. ${next.length} clips on the timeline.`;
 };
 $('#timeline-remove').onclick = () => {
+  if (state.selectedTrack === 'extra-audio') {
+    if (!state.extraAudioClips.some(clip => clip.id === state.selectedAudioId)) return;
+    rememberTimeline();
+    state.extraAudioClips = state.extraAudioClips.filter(clip => clip.id !== state.selectedAudioId);
+    state.audioPlayers.get(state.selectedAudioId)?.pause(); state.audioPlayers.delete(state.selectedAudioId);
+    state.selectedAudioId = null; state.selectedTrack = 'video'; renderTimeline();
+    message.textContent = 'Removed only the selected A2 audio clip. Video remains unchanged.'; return;
+  }
   const selected = state.segments[state.selectedSegment];
   const next = deleteTimelineTrack(state.segments, state.selectedSegment, state.selectedTrack);
   if (!next) { message.textContent = 'That track is already empty.'; return; }
@@ -417,6 +573,19 @@ $('#timeline-unlink').onclick = () => {
   const next = unlinkTimelineSegment(state.segments, state.selectedSegment);
   if (!next) return;
   rememberTimeline(); state.segments = next; renderTimeline(); message.textContent = 'Video and camera audio unlinked. Select either row, then Delete removes only that row.';
+};
+$('#timeline-detach-audio').onclick = () => {
+  const segment = state.segments[state.selectedSegment];
+  if (!segment || segment.audioEnabled === false) return;
+  const sourceIndex = segment.sourceIndex;
+  rememberTimeline(); video.pause();
+  const clip = {id: crypto.randomUUID(), sourceIndex, start: segment.start, end: segment.end,
+    timelineStart: timelineOffset(state.segments, state.selectedSegment), volume: 1};
+  state.extraAudioClips.push(clip);
+  state.segments[state.selectedSegment] = {...segment, audioEnabled: false, linked: false, preserveGap: true};
+  state.selectedTrack = 'extra-audio'; state.selectedAudioId = clip.id;
+  renderTimeline(); syncPreviews();
+  message.textContent = 'Camera audio is now a full A2 clip. Split or delete the video separately; the audio stays in place.';
 };
 $('#timeline-link').onclick = () => {
   const next = linkTimelineSegment(state.segments, state.selectedSegment);
@@ -449,10 +618,28 @@ $('#clip-apply').onclick = () => {
   renderTimeline(); seekProject(timelineOffset(next, state.selectedSegment));
   message.textContent = 'Selected clip trimmed. The source video is unchanged.';
 };
+$('#audio-clip-apply').onclick = () => {
+  const clip = state.extraAudioClips.find(item => item.id === state.selectedAudioId);
+  if (!clip) return;
+  const start = number('#audio-clip-in'), end = number('#audio-clip-out');
+  const position = number('#audio-clip-position'), volume = number('#audio-clip-volume') / 100;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(position) || !Number.isFinite(volume) ||
+      start < 0 || end > state.sources[clip.sourceIndex].duration + .05 || end - start < .08 || position < 0 || volume < 0 || volume > 2) {
+    message.textContent = 'Set an A2 audio range inside its source, a nonnegative timeline start, and volume from 0 to 200%.'; return;
+  }
+  rememberTimeline();
+  Object.assign(clip, {start: Number(start.toFixed(4)), end: Number(Math.min(end, state.sources[clip.sourceIndex].duration).toFixed(4)),
+    timelineStart: Number(position.toFixed(4)), volume});
+  state.segments = extendWithGap(state.segments, audioEnd(clip), clip.sourceIndex, state.sources[clip.sourceIndex].duration);
+  renderTimeline(); seekProject(Math.min(clip.timelineStart, state.duration - .001));
+  message.textContent = 'A2 audio trim, position, and volume updated.';
+};
 $('#timeline-restore').onclick = () => {
   if (!state.segments.length) return;
   rememberTimeline();
-  video.pause(); state.segments = []; state.selectedSegment = 0; state.activeSegment = 0; state.projectTime = 0;
+  video.pause(); state.segments = []; state.extraAudioClips = []; state.selectedAudioId = null;
+  for (const player of state.audioPlayers.values()) player.pause(); state.audioPlayers.clear();
+  state.selectedTrack = 'video'; state.selectedSegment = 0; state.activeSegment = 0; state.projectTime = 0;
   state.activeSourceIndex = -1; video.removeAttribute('src'); video.load();
   $('#preview-placeholder').hidden = false;
   renderTimeline(); message.textContent = 'Timeline cleared. Imported videos remain in the project bin.';
@@ -466,6 +653,7 @@ document.addEventListener('keydown', (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.shiftKey && key === 'r' && !$('#timeline-split').disabled) { event.preventDefault(); $('#timeline-split').click(); return; }
   if (event.shiftKey && key === 'g' && !$('#timeline-unlink').disabled) { event.preventDefault(); $('#timeline-unlink').click(); return; }
+  if (event.shiftKey && key === 'd' && !$('#timeline-detach-audio').disabled) { event.preventDefault(); $('#timeline-detach-audio').click(); return; }
   if (event.shiftKey && key === 'l' && !$('#timeline-link').disabled) { event.preventDefault(); $('#timeline-link').click(); return; }
   if ((event.key === 'Delete' || event.key === 'Backspace') && !$('#timeline-remove').disabled) { event.preventDefault(); $('#timeline-remove').click(); return; }
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); seekProject(state.projectTime + (event.key === 'ArrowLeft' ? -1 : 1) / 60); return; }
@@ -527,6 +715,8 @@ function editSettings(remap) {
   return {
     autoFaces: $('#auto-faces').checked, keepClear: state.keepClear, blurRegions: state.regions,
     segments: state.segments.map(segment => ({ ...segment, sourceIndex: remap ? remap.get(segment.sourceIndex) : segment.sourceIndex })),
+    audioClips: state.extraAudioClips.map(({id, ...clip}) => ({...clip,
+      sourceIndex: remap ? remap.get(clip.sourceIndex) : clip.sourceIndex})),
     voiceStart: number('#voice-start'), voiceIn: number('#voice-in'), voiceOut: $('#voice-out').value ? number('#voice-out') : null,
     voiceVolume: number('#voice-volume') / 100, originalVolume: number('#original-volume') / 100,
     pipStart: number('#pip-start'), pipEnd: $('#pip-end').value ? number('#pip-end') : state.duration,
@@ -558,17 +748,28 @@ $('#plan-apply').onclick = () => {
         !Number.isFinite(segment.start) || !Number.isFinite(segment.end) || segment.start < 0 ||
         segment.end <= segment.start || segment.end > state.sources[segment.sourceIndex].duration + 0.1))
       throw new Error('The plan contains an invalid timeline clip.');
+    if (!Array.isArray(settings.audioClips || []) || (settings.audioClips || []).some(clip =>
+      !clip || !Number.isInteger(clip.sourceIndex) || !state.sources[clip.sourceIndex] ||
+      !Number.isFinite(clip.start) || !Number.isFinite(clip.end) || !Number.isFinite(clip.timelineStart) ||
+      clip.start < 0 || clip.end - clip.start < .08 || clip.end > state.sources[clip.sourceIndex].duration + .05 ||
+      clip.timelineStart < 0)) throw new Error('The plan contains an invalid A2 audio clip.');
+    const plannedDuration = Math.max(timelineDuration(settings.segments),
+      ...(settings.audioClips || []).map(clip => audioEnd(clip)));
     if (!Array.isArray(settings.blurRegions) || !Array.isArray(settings.motionTitles || []) ||
       (settings.motionTitles || []).some(title => !title || typeof title.text !== 'string' ||
         !Number.isFinite(title.start) || !Number.isFinite(title.end) || title.end <= title.start ||
-        title.end > timelineDuration(settings.segments) + 0.1))
+        title.end > plannedDuration + 0.1))
       throw new Error('The plan needs valid blur and title lists.');
     rememberTimeline(); video.pause();
     state.segments = settings.segments.map(segment => ({...segment}));
+    state.extraAudioClips = (settings.audioClips || []).map(clip => ({...clip, id: crypto.randomUUID()}));
+    for (const clip of state.extraAudioClips) state.segments = extendWithGap(state.segments, audioEnd(clip),
+      clip.sourceIndex, state.sources[clip.sourceIndex].duration);
+    for (const player of state.audioPlayers.values()) player.pause(); state.audioPlayers.clear();
     state.regions = settings.blurRegions.map(region => ({...region}));
     state.keepClear = settings.keepClear || null;
     state.motionTitles = (settings.motionTitles || []).map(title => ({...title}));
-    state.selectedSegment = 0; state.selectedTrack = 'video';
+    state.selectedSegment = 0; state.selectedTrack = 'video'; state.selectedAudioId = null;
     $('#auto-faces').checked = settings.autoFaces === true;
     for (const [id, value] of [['#voice-start',settings.voiceStart],['#voice-in',settings.voiceIn],['#voice-out',settings.voiceOut],
       ['#voice-volume',settings.voiceVolume == null ? null : settings.voiceVolume * 100],
@@ -607,12 +808,33 @@ function syncPreviews() {
     if (Math.abs(pipPreview.currentTime - pipTime) > 0.4) pipPreview.currentTime = pipTime;
     if (!video.paused) pipPreview.play().catch(() => {});
   } else pipPreview.pause();
+  const activeAudioIds = new Set();
+  for (const clip of state.extraAudioClips) {
+    const offset = state.projectTime - clip.timelineStart;
+    if (offset < 0 || offset >= clip.end - clip.start) continue;
+    activeAudioIds.add(clip.id);
+    let player = state.audioPlayers.get(clip.id);
+    if (!player) {
+      player = new Audio(state.sources[clip.sourceIndex].url);
+      player.preload = 'auto'; state.audioPlayers.set(clip.id, player);
+    }
+    player.volume = Math.min(1, clip.volume);
+    const target = clip.start + offset;
+    if (Math.abs(player.currentTime - target) > .25) player.currentTime = target;
+    if (!video.paused) player.play().catch(() => {});
+    else player.pause();
+  }
+  for (const [id, player] of state.audioPlayers) if (!activeAudioIds.has(id)) player.pause();
 }
 video.addEventListener('play', syncPreviews);
-video.addEventListener('pause', () => { voicePreview.pause(); pipPreview.pause(); });
+video.addEventListener('pause', () => {
+  voicePreview.pause(); pipPreview.pause();
+  for (const player of state.audioPlayers.values()) player.pause();
+});
 $('#editor-submit').addEventListener('click', async () => {
   if (!state.sources.length || !state.segments.length || !Number.isFinite(state.duration) || !state.duration) { message.textContent = 'Add at least one source range to the timeline first.'; return; }
-  const usedSources = [...new Set(state.segments.map(segment => segment.sourceIndex))];
+  const usedSources = [...new Set([...state.segments.map(segment => segment.sourceIndex),
+    ...state.extraAudioClips.map(clip => clip.sourceIndex)])];
   const uploadIndex = new Map(usedSources.map((sourceIndex, index) => [sourceIndex, index]));
   const settings = editSettings(uploadIndex);
   const form = new FormData();

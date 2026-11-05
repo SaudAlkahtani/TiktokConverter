@@ -31,6 +31,55 @@ test('editor validates privacy areas, destination and GPU choices', () => {
   assert.equal(validateEditSettings({ blurRegions: [], segments: [{start:0,end:1,videoEnabled:false,audioEnabled:true}] }, 2).segments[0].videoEnabled,false);
   assert.equal(validateEditSettings({ blurRegions: [], voiceIn:.25, voiceOut:.75 }, 2).voiceOut,.75);
   assert.throws(() => validateEditSettings({ blurRegions: [], voiceIn:1, voiceOut:.5 }, 2), /Voice out/i);
+  assert.throws(() => validateEditSettings({blurRegions:[], audioClips:[{sourceIndex:2,start:0,end:1,timelineStart:0}]}, [2]), /unknown source/i);
+  assert.equal(validateEditSettings({blurRegions:[], audioClips:[{sourceIndex:0,start:0,end:2,timelineStart:0}]}, [2]).audioClips.length, 1);
+  assert.equal(validateEditSettings({blurRegions:[], segments:[{start:0,end:1},
+    {start:0,end:.01,videoEnabled:false,audioEnabled:false,preserveGap:true}]}, [2]).segments.length, 2);
+});
+
+test('a borrowed audio track stays full length while its video is cut independently', async () => {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'gym-separate-audio-'));
+  try {
+    const first = path.join(folder, 'video.mp4'), second = path.join(folder, 'borrowed.mp4');
+    const output = path.join(folder, 'edit.mp4');
+    ffmpeg(['-f','lavfi','-i','color=c=red:s=180x320:r=60:d=1',
+      '-f','lavfi','-i','sine=frequency=220:sample_rate=48000:duration=1',
+      '-c:v','libx264','-preset','ultrafast','-c:a','aac',first]);
+    ffmpeg(['-f','lavfi','-i','color=c=blue:s=180x320:r=60:d=1',
+      '-f','lavfi','-i','sine=frequency=660:sample_rate=48000:duration=1',
+      '-c:v','libx264','-preset','ultrafast','-c:a','aac',second]);
+    const media = await Promise.all([probe(first), probe(second)]);
+    const settings = validateEditSettings({blurRegions:[], autoFaces:false, encoder:'cpu', originalVolume:0,
+      segments:[{sourceIndex:0,start:0,end:.4,videoEnabled:true,audioEnabled:false},
+        {sourceIndex:0,start:.4,end:1,videoEnabled:false,audioEnabled:false,preserveGap:true}],
+      audioClips:[{sourceIndex:1,start:0,end:.5,timelineStart:0},
+        {sourceIndex:1,start:.5,end:1,timelineStart:.5}]}, media);
+    const result = await renderEdit({inputPaths:[first,second],output,settings});
+    assert.ok(Math.abs(result.duration - 1) < .1);
+    const pixel = time => {
+      const frame = spawnSync(config.ffmpeg, ['-v','error','-ss',String(time),'-i',output,
+        '-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','-'], {windowsHide:true});
+      assert.equal(frame.status,0,frame.stderr?.toString());
+      return frame.stdout.subarray(0,3);
+    };
+    const red = pixel(.2), black = pixel(.8);
+    assert.ok(red[0] > red[2] + 70, `Expected red video before cut: ${red}`);
+    assert.ok(black.every(channel => channel < 35), `Expected black video after cut: ${black}`);
+    const pcm = spawnSync(config.ffmpeg, ['-v','error','-ss','0.7','-i',output,'-vn','-t','0.1',
+      '-ac','1','-ar','48000','-f','s16le','-'], {windowsHide:true});
+    assert.equal(pcm.status,0,pcm.stderr?.toString());
+    const samples = new Int16Array(pcm.stdout.buffer, pcm.stdout.byteOffset, Math.floor(pcm.stdout.length / 2));
+    const energy = frequency => {
+      let real = 0, imaginary = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const angle = 2 * Math.PI * frequency * i / 48000;
+        real += samples[i] * Math.cos(angle); imaginary += samples[i] * Math.sin(angle);
+      }
+      return real * real + imaginary * imaginary;
+    };
+    assert.ok(energy(660) > energy(220) * 10,
+      `Borrowed audio should continue after the video cut (660=${energy(660)}, 220=${energy(220)}, samples=${samples.length}).`);
+  } finally { await fs.rm(folder, {recursive:true, force:true}); }
 });
 
 test('edit mixes voice, reduces source sound, blurs a region and overlays video before platform export', async () => {

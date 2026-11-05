@@ -93,7 +93,15 @@ video or audio row while preserving the other and its position. **Shift+L**
 relinks an intact pair, and **Restore selected track** brings a removed row back
 from the source. **Shift+R** splits at the playhead. **Revert** or **Ctrl+Z**
 undoes the last timeline edit; **Ctrl+Shift+Z** redoes it. Linked deletion removes
-both rows. A2 and V2 show optional voice and picture in picture. The separate
+both rows. Drag any imported video from the bin onto V1 to insert picture and
+its camera sound, or onto A2 to use its sound alone. **Add audio at playhead**
+also puts the selected source range on A2. Select an A2 clip to trim its own
+In/Out points, move it on the timeline, set its volume, split it with
+**Shift+R**, or delete it without changing the video. **Shift+D** detaches a
+V1/A1 clip's camera audio into A2 as a full independent clip; you can then
+split or remove the video while keeping the audio. Audio that continues past
+the last visible video keeps a black picture for that remaining time. A3 holds
+the optional voice recording, and V2 shows picture in picture. The separate
 voice monitor lets you listen to a recording, mark its source In/Out points,
 adjust its volume, and choose where it starts in the timeline.
 The project monitor jumps between source videos during sequence playback. Blur, voice
@@ -114,7 +122,7 @@ the app checks Chrome, Edge, then Brave on Windows. Set
 continue through the usual FFmpeg path.
 
 For repeatable edits, click **Generate JSON** in the **Edit plan JSON** panel.
-You can change clip ranges, audio levels, blur rectangles, and motion titles in
+You can change clip ranges, independent `audioClips`, audio levels, blur rectangles, and motion titles in
 the JSON, then click **Apply JSON**. Import the source videos named in the plan
 in the same order first. **Download plan** saves the JSON file. The browser
 cannot restore local file selections from JSON, so voice and picture in
@@ -128,7 +136,10 @@ npm ci
 npm run editor:plan -- .\gym-edit-plan.json
 ```
 
-See [the example plan](examples/gym-edit-plan.json) for the schema. The CLI
+See [the example plan](examples/gym-edit-plan.json) and the
+[separate audio example](examples/separate-audio-plan.json) for the schema.
+Each `audioClips` entry uses a source index, source In/Out seconds, a timeline
+start, and a 0–2 volume multiplier. The CLI
 creates a master, TikTok MP4, Instagram MP4, and an outputs JSON in the plan's
 `outputDir` or the configured output folder. It uses the same edit validation,
 Remotion titles, and final conversion profiles as the browser editor. Keep the

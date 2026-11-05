@@ -66,7 +66,7 @@ export function deleteTimelineTrack(segments, index, track) {
   const key = track === 'video' ? 'videoEnabled' : 'audioEnabled';
   if (clip[key] === false) return null;
   const changed = { ...clip, [key]: false };
-  if (changed.videoEnabled === false && changed.audioEnabled === false) return removeTimelineSegment(segments, index);
+  if (changed.videoEnabled === false && changed.audioEnabled === false && !changed.preserveGap) return removeTimelineSegment(segments, index);
   const next = [...segments];
   next[index] = changed;
   return next;
