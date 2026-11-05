@@ -42,10 +42,10 @@ test('standalone TikTok and Instagram both preserve normal audio timing', async 
   }
 });
 
-test('all converter tabs describe the experimental platform profiles', async () => {
-  for (const page of ['index.html', 'instagram.html', 'both.html', 'editor.html', 'vertical-test.html']) {
+test('all converter tabs describe the platform profiles', async () => {
+  for (const page of ['index.html', 'instagram.html', 'both.html', 'editor.html']) {
     const html = await fs.readFile(path.join(config.root, 'public', page), 'utf8');
-    assert.match(html, /NEW BRANCH — TEST CAREFULLY/i, page);
+    assert.match(html, /Welcome/i, page);
     assert.match(html, /1080/i, page);
     if (page === 'instagram.html') {
       assert.match(html, /30 fps/i, page);

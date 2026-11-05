@@ -1,5 +1,5 @@
 import { setupNavigation } from '/navigation.js';
-const platform = location.pathname.startsWith('/vertical-test') ? 'vertical-test' : location.pathname.startsWith('/both') ? 'both' : location.pathname.startsWith('/instagram') ? 'instagram' : 'tiktok';
+const platform = location.pathname.startsWith('/both') ? 'both' : location.pathname.startsWith('/instagram') ? 'instagram' : 'tiktok';
 const jobsEl = document.querySelector('#jobs');
 const emptyEl = document.querySelector('#empty');
 const template = document.querySelector('#job-template');
@@ -16,7 +16,7 @@ const render = (jobs) => {
   jobsEl.replaceChildren(); emptyEl.hidden = jobs.length > 0;
   for (const job of jobs) {
     const node = template.content.cloneNode(true); const el = node.querySelector('.job');
-    node.querySelector('h3').textContent = `${job.platform === 'vertical-test' ? 'Vertical 1080p test' : job.platform === 'instagram' ? 'Instagram' : 'TikTok'} · ${job.sourceName}`;
+    node.querySelector('h3').textContent = `${job.platform === 'instagram' ? 'Instagram' : 'TikTok'} · ${job.sourceName}`;
     node.querySelector('.metadata').textContent = `${bytes(job.bytes)} · queued ${new Date(job.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
@@ -31,10 +31,10 @@ const render = (jobs) => {
   }
 };
 fetch('/api/health').then(r=>r.json()).then((health)=>{
-  const tiktokProfile = 'TikTok/test: source ≥45 fps → 60 fps at 25 Mb/s, 2× timeline; lower fps → 30 fps at 15 Mb/s, normal speed';
+  const tiktokProfile = 'TikTok: source ≥45 fps → 60 fps at 25 Mb/s, 2× timeline; lower fps → 30 fps at 15 Mb/s, normal speed';
   const instagramProfile = 'Instagram: 1080×1920 H.264 · always 30 fps at 15 Mb/s · normal speed';
   const mode = platform === 'instagram' ? instagramProfile : platform === 'both' ? `${tiktokProfile} · ${instagramProfile}` : tiktokProfile;
-  profile.textContent = `TEST BRANCH · ${mode} · AAC 256 kb/s · up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per file`;
+  profile.textContent = `${mode} · AAC 256 kb/s · up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per file`;
 });
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];

@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 import { assertRec709Output } from './color-safety.js';
-import { buildVerticalTestArgs, instagramProfile, verticalTestProfile } from './vertical-test.js';
+import { buildVerticalArgs, instagramProfile, tiktokProfile } from './vertical-profile.js';
 
 const run = async (command, args) => {
   const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -44,11 +44,11 @@ export async function render({ input, output, onProgress = () => {}, signal, pla
   throwIfAborted(signal);
   const media = await probe(input);
   throwIfAborted(signal);
-  if (!['tiktok', 'instagram', 'vertical-test'].includes(platform)) throw new Error('Unknown conversion mode.');
-  const verticalProfile = platform === 'instagram' ? instagramProfile(media) : verticalTestProfile(media);
+  if (!['tiktok', 'instagram'].includes(platform)) throw new Error('Unknown conversion mode.');
+  const verticalProfile = platform === 'instagram' ? instagramProfile(media) : tiktokProfile(media);
   const colorCheck = verticalProfile.colorCheck;
   const expectedDuration = media.duration * verticalProfile.timestampScale;
-  const args = buildVerticalTestArgs(input, output, media, verticalProfile);
+  const args = buildVerticalArgs(input, output, media, verticalProfile);
   const child = spawn(config.ffmpeg, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const stop = () => child.kill();
   signal?.addEventListener("abort", stop, { once: true });

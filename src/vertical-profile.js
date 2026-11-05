@@ -6,7 +6,7 @@ function rateNumber(value) {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-export function verticalTestProfile(media) {
+export function tiktokProfile(media) {
   const sourceFps = rateNumber(media.averageFrameRate) || rateNumber(media.fps);
   if (!Number.isFinite(sourceFps) || sourceFps <= 0) throw new Error('The source frame rate could not be read.');
   const fps = sourceFps >= 45 ? 60 : 30;
@@ -17,10 +17,10 @@ export function verticalTestProfile(media) {
 }
 
 export function instagramProfile(media) {
-  return { ...verticalTestProfile(media), fps: 30, bitrateMbps: 15, timestampScale: 1 };
+  return { ...tiktokProfile(media), fps: 30, bitrateMbps: 15, timestampScale: 1 };
 }
 
-export function buildVerticalTestArgs(input, output, media, profile = verticalTestProfile(media)) {
+export function buildVerticalArgs(input, output, media, profile = tiktokProfile(media)) {
   const hdr = profile.colorCheck === 'hdr-bt2020';
   const wideSdr = profile.colorCheck === 'sdr-bt2020';
   const colorFilter = hdr

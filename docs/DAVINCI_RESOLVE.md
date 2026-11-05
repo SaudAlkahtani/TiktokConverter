@@ -37,7 +37,7 @@ are not deleted by the handoff script.
    assume all Insta360 clips use the same color profile.
 
 The converter checks color tags before each TikTok, Instagram, and editor
-render. On this experimental branch, TikTok and Instagram transform correctly
+render. TikTok and Instagram transform correctly
 tagged BT.2020 SDR and PQ/HLG sources to Rec.709. The editor's working master
 retains its own color policy. Unsupported log or inconsistent profiles are
 rejected rather than simply relabeled Rec.709. Tone mapping changes overall

@@ -1,18 +1,15 @@
 # Gym Video Editor + Combined Converter
 
-**Experimental branch: `codex/vertical-1080p-fps-bitrate-test`. Test a short
-video before using a full export.** TikTok, Instagram, Both, and the editor's
-final downloads are 1080 × 1920 H.264 MP4 files. TikTok and the test tab use
+TikTok, Instagram, Both, and the editor's
+final downloads are 1080 × 1920 H.264 MP4 files. TikTok uses
 60 fps at 25 Mb/s with `-itsscale 2` for a 60 fps source, slowing video and
 audio to a 2× timeline. Lower source frame rates use 30 fps at 15 Mb/s and
 normal speed. Instagram always uses 30 fps at 15 Mb/s and normal speed,
 including for 3K 60 fps sources. These rates are encoder targets and ceilings;
 the measured average may be lower for simple footage. The full source frame is
 fitted with padding when its aspect ratio is not 9:16. AAC audio is 256 kb/s,
-48 kHz, stereo. The
-[Vertical 1080p test](http://127.0.0.1:4173/vertical-test) tab provides a
-direct way to try the TikTok frame-rate method. The four maintained release branches
-retain their own presets.
+48 kHz, stereo. TikTok and Instagram have their own tabs, and Both makes the two versions from
+one upload. The four maintained branches use this conversion profile.
 
 This Windows app edits local gym clips and exports them through one shared
 combined-converter workflow. It does not use Telegram, OpenClaw, or a cloud
@@ -26,18 +23,18 @@ Editing in DaVinci Resolve Free instead? See the
 1. Install Git, Node.js 20 or newer, and Python 3 if you want automatic face
    detection. Make sure `git`, `node`, `npm`, and optionally `python` work in
    PowerShell. Install a current NVIDIA or AMD driver if using GPU encoding.
-2. Clone **this branch** of the private repository and install its locked Node
+2. Clone the combined converter branch of the private repository and install its Node
    dependencies:
 
    ```powershell
-   git clone --branch codex/vertical-1080p-fps-bitrate-test --single-branch https://github.com/SaudAlkahtani/TiktokConverter.git
+   git clone --branch release/combined-converter --single-branch https://github.com/SaudAlkahtani/TiktokConverter.git
    Set-Location TiktokConverter
    npm ci
    ```
 
    If the repository is already cloned, run `git fetch origin`, then
-   `git switch codex/vertical-1080p-fps-bitrate-test` if the branch exists locally, or
-   `git switch --track origin/codex/vertical-1080p-fps-bitrate-test` if it does not. Run
+   `git switch release/combined-converter` if the branch exists locally, or
+   `git switch --track origin/release/combined-converter` if it does not. Run
    `git pull --ff-only` and `npm ci` after switching.
 3. Create the machine-local configuration file:
 
@@ -59,9 +56,8 @@ Editing in DaVinci Resolve Free instead? See the
    Manual blur rectangles work without Python.
 5. Start the server with `npm start` or double-click
    `Start-Local-Converter.cmd`. Open
-   [http://127.0.0.1:4173/vertical-test](http://127.0.0.1:4173/vertical-test)
-   to test the new preset, or `/tiktok`, `/instagram`, `/both`, or `/editor` to
-   use it through those workflows. Keep the
+   [http://127.0.0.1:4173/both](http://127.0.0.1:4173/both) for two exports,
+   or `/tiktok`, `/instagram`, or `/editor` for those workflows. Keep the
    command window open while processing. Run `npm run doctor` to check local
    FFmpeg and encoder capabilities. The project includes bundled FFmpeg and
    FFprobe; for a different build, set `FFMPEG_PATH` and `FFPROBE_PATH` in
@@ -125,7 +121,7 @@ audio; its finished file lasts about twice as long. Instagram keeps the source
 duration while converting to 30 fps.
 The final H.264 conversion uses CPU libx264; the editor's GPU choice applies
 to its working master. Legacy `VIDEO_*` values from other branches are ignored
-on this experimental branch.
+in the maintained branches.
 
 Color safety: TikTok, Instagram, and editor exports check source color tags
 before rendering and validate Rec.709 tags afterward. The final converters

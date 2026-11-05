@@ -1,0 +1,15 @@
+.welcome-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: -20px 0 30px;
+  padding: 16px 20px;
+  border: 1px solid #564574;
+  border-radius: 14px;
+  background: linear-gradient(110deg, #241c37, #181424);
+  color: #d9d0e9;
+  line-height: 1.5;
+}
+.welcome-note strong { color: #f0e8ff; }
+.welcome-note span { font-size: 13px; }

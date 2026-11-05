@@ -22,12 +22,12 @@ await app.register(multipart, { limits: { files: config.maxUploadFiles, fileSize
 app.get('/both', async (request, reply) => reply.sendFile('both.html'));
 app.get('/editor', async (request, reply) => reply.sendFile('editor.html'));
 app.get('/instagram', async (request, reply) => reply.sendFile('instagram.html'));
-app.get('/vertical-test', async (request, reply) => reply.sendFile('vertical-test.html'));
+app.get('/vertical-test', async (request, reply) => reply.redirect('/tiktok'));
 app.get('/tiktok', async (request, reply) => reply.sendFile('index.html'));
 
 const safeName = (name = "video") => path.basename(name).replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "video";
 
-app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "Experimental vertical 1080p", codec: "H.264", bitrate: "TikTok 60 fps: 25 Mb/s; Instagram 30 fps: 15 Mb/s", audioBitrate: "256k", timing: "TikTok 60 fps uses 2× input timeline; Instagram always keeps normal duration" } }));
+app.get("/api/health", async () => ({ ok: true, uploadLimitBytes: config.uploadLimitBytes, maxUploadFiles: config.maxUploadFiles, profile: { name: "Vertical video converter", codec: "H.264", bitrate: "TikTok 60 fps: 25 Mb/s; Instagram 30 fps: 15 Mb/s", audioBitrate: "256k", timing: "TikTok 60 fps uses 2× input timeline; Instagram keeps normal duration" } }));
 app.get('/api/editor/encoders', async () => ({ ...await encoderCapabilities(), faceDetection: await faceDetectorAvailable() }));
 app.get("/api/jobs", async () => queue.snapshot());
 app.delete("/api/jobs/active", async (request) => queue.clearActive(request.query.platform));
@@ -79,7 +79,7 @@ app.post('/api/editor/jobs', async (request, reply) => {
 });
 app.post("/api/uploads", async (request, reply) => {
   const platform = request.query.platform || 'tiktok';
-  if (!['tiktok', 'instagram', 'both', 'vertical-test'].includes(platform)) return reply.code(400).send({ error: 'Choose TikTok, Instagram, both, or the vertical test mode.' });
+  if (!['tiktok', 'instagram', 'both'].includes(platform)) return reply.code(400).send({ error: 'Choose TikTok, Instagram, or both.' });
   const accepted = [];
   const rejected = [];
   try {
