@@ -32,15 +32,15 @@ const settingsFor = (folder) => ({ ...config, token, botUsername: '@DedicatedTes
   uploadLimitBytes: 10 * 1024 ** 2, cleanupSourceAfterSend: true, allowedChatIds: new Set(['42']) });
 const option = (args, key) => args[args.indexOf(key) + 1];
 
-test('TikTok rate and half speed stay locked to commit 6378e68', () => {
+test('TikTok rate and timing follow the standard vertical profile', () => {
   for (const [width, height] of [[1080,1920],[1920,1080],[1440,2560],[1728,3072],[2160,3840],[640,360]]) {
-    const media = { width, height }; const args = buildRenderArgs(media, 'in.mp4', 'out.mp4');
-    assert.deepEqual(bitrateFor(media), { bitrate: '20M' });
-    assert.equal(option(args, '-b:v'), '20M'); assert.equal(args.includes('-maxrate'), false);
-    assert.equal(args.includes('-bufsize'), false); assert.equal(option(args, '-itsscale'), '2');
+    const media = { width, height, fps: '60/1', colorPrimaries: 'bt709', colorTransfer: 'bt709', colorSpace: 'bt709' }; const args = buildRenderArgs(media, 'in.mp4', 'out.mp4');
+    assert.deepEqual(bitrateFor(media), { bitrate: '25M' });
+    assert.equal(option(args, '-b:v'), '25M'); assert.equal(option(args, '-maxrate'), '25M');
+    assert.equal(option(args, '-bufsize'), '50M'); assert.equal(option(args, '-itsscale'), '2');
     assert.equal(args.includes('-af'), false);
-    assert.equal(option(args, '-c:v'), 'libx265'); assert.equal(option(args, '-b:a'), '256k');
-    assert.match(option(args, '-vf'), /fps=60/); assert.doesNotMatch(option(args, '-vf'), /scale=|crop=/);
+    assert.equal(option(args, '-c:v'), 'libx264'); assert.equal(option(args, '-b:a'), '256k');
+    assert.match(option(args, '-vf'), /fps=60/); assert.match(option(args, '-vf'), /pad=1080:1920/);
   }
 });
 
@@ -51,7 +51,7 @@ test('Windows resolves /mnt and Linux-home Telegram paths correctly', () => {
   assert.equal(redactTelegramError(new Error(`request ${token} failed`), {token}), 'request [redacted] failed');
 });
 
-test('real HEVC exports preserve dimensions, doubled duration, audio, and 60fps', async (t) => {
+test('real H.264 exports are vertical with doubled duration, audio, and 60fps', async (t) => {
   const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'local-profile-test-'));
   try {
     for (const [width, height] of [[1080,1920],[1440,2560],[1728,3072],[2160,3840]]) {
@@ -59,10 +59,10 @@ test('real HEVC exports preserve dimensions, doubled duration, audio, and 60fps'
         const input = path.join(folder, `source-${width}.mp4`); const output = path.join(folder, `export-${width}.mp4`);
         await tool(['-f','lavfi','-i',`color=blue:size=${width}x${height}:rate=60:duration=0.2`,'-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=0.2','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac',input]);
         const result = await render({ input, output });
-        assert.equal(result.width,width); assert.equal(result.height,height); assert.equal(result.fps,'60/1');
-        assert.equal(result.codec,'hevc'); assert.ok(Math.abs(result.duration - 0.4) < 0.05);
+        assert.equal(result.width,1080); assert.equal(result.height,1920); assert.equal(result.fps,'60/1');
+        assert.equal(result.codec,'h264'); assert.ok(Math.abs(result.duration - 0.4) < 0.05);
         assert.equal(result.audio.codec,'aac'); assert.equal(result.audio.channels,2);
-        assert.equal(result.bitrate,bitrateFor({width,height}).bitrate);
+        assert.equal(result.bitrate,'25M');
       });
     }
   } finally { await fs.rm(folder,{recursive:true,force:true}); }
@@ -106,9 +106,9 @@ test('Telegram receives → shared queue → real conversion → returns File �
     const job = queue.jobs[0]; assert.equal(job.origin,'telegram'); assert.equal(job.chatId,42); assert.equal(job.method,'return');
     await waitFor(() => job.sourceDeletedAt || job.status === 'failed');
     assert.equal(job.status,'complete',job.error); assert.equal(job.telegramStatus,'sent'); assert.equal(sent.length,1);
-    assert.equal(sent[0].chat_id,42); assert.match(sent[0].caption,/320×240.*60fps.*half speed/);
+    assert.equal(sent[0].chat_id,42); assert.match(sent[0].caption,/1080×1920.*60fps.*half speed/);
     await assert.rejects(fs.access(job.sourcePath)); await fs.access(job.outputPath); await fs.access(fixture);
-    assert.equal(job.media.codec,'hevc'); assert.equal(job.media.fps,'60/1'); assert.ok(Math.abs(job.media.duration-1)<0.05);
+    assert.equal(job.media.codec,'h264'); assert.equal(job.media.fps,'60/1'); assert.ok(Math.abs(job.media.duration-1)<0.05);
     assert.equal(drafts.items.length,0,'Return-only must never create a TikTok draft.');
     assert.ok(!replies.some((text)=>text.includes('What description')));
     // A different video explicitly selects TikTok: same encoding and delivery,
@@ -164,7 +164,7 @@ test('failed Telegram delivery keeps originals and supports a successful retry',
     const settings = settingsFor(folder); await fs.mkdir(settings.directories.incoming);
     const sourcePath = path.join(settings.directories.incoming,'original.mp4'); await fs.writeFile(sourcePath,'fixture');
     const outputPath = path.join(folder,'export.mp4'); await fs.writeFile(outputPath,'export');
-    const job = {chatId:42,sourcePath,outputPath,media:{bytes:6,width:1080,height:1920,bitrate:'20M'}};
+    const job = {chatId:42,sourcePath,outputPath,media:{bytes:6,width:1080,height:1920,bitrate:'25M',fps:'60/1',timestampScale:2}};
     const queue = {emitUpdate(){}};
     const bot = {api:{sendDocument:async()=>{throw new Error(`network ${token}`);},sendMessage:async()=>{}}};
     await deliverTelegramExport(bot,queue,job,settings);
@@ -214,10 +214,10 @@ test('batch browser uploads use the same profile, keep originals, and clear reco
     const accepted=await response.json(); assert.equal(accepted.jobs.length,2);
     const jobs=await waitFor(async()=>{const list=await (await fetch(`${base}/api/jobs`)).json(); return list.length===2 && list.every((job)=>['complete','failed'].includes(job.status)) ? list : false;});
     assert.ok(jobs.every((job)=>job.status==='complete'),JSON.stringify(jobs));
-    assert.deepEqual(jobs.map((job)=>job.sourceName),['one.mp4','two.mp4']); assert.ok(jobs.every((job)=>job.media.bitrate==='20M' && !job.telegramStatus));
+    assert.deepEqual(jobs.map((job)=>job.sourceName),['one.mp4','two.mp4']); assert.ok(jobs.every((job)=>job.media.bitrate==='25M' && !job.telegramStatus));
     const download=await fetch(`${base}/api/jobs/${jobs[0].id}/download`); assert.equal(download.status,200);
     const output=path.join(folder,'download.mp4'); await fs.writeFile(output,new Uint8Array(await download.arrayBuffer()));
-    assert.equal((await probe(output)).codec,'hevc');
+    assert.equal((await probe(output)).codec,'h264');
     await fetch(`${base}/api/jobs/completed`,{method:'DELETE'});
     assert.deepEqual(await (await fetch(`${base}/api/jobs`)).json(),[]);
     assert.equal((await fs.readdir(path.join(folder,'incoming'))).length,2);

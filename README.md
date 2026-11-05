@@ -5,27 +5,9 @@ Telegram and official-local branches. Browser batch uploads and the dedicated Te
 FIFO conversion queue and exactly the same FFmpeg profile. Processing runs on
 your Windows computer; the dashboard listens only on `127.0.0.1:4173`.
 
-## Shared export profile
+## Export profile
 
-- Original dimensions, with no resize or crop; constant 60fps and half-speed
-  playback (`-itsscale 2`). Source audio timestamps are scaled too.
-- Native HEVC/H.265 MP4 (`libx265`, `hvc1`, fast start), not Khaled's H.264 codec.
-- Existing reference sharpening: `unsharp=3:3:0.4:3:3:0.4`.
-- Fixed 20 Mbps HEVC target; no resolution-dependent rate caps.
-- AAC 256 kbps stereo, 48 kHz; 60-frame GOP, Rec.709 metadata, 8-bit 4:2:0.
-- The TikTok command is locked to commit `6378e68`. Conflicting environment
-  overrides are rejected and finished files are verified with ffprobe.
-
-The 20 Mbps setting is an encoder target, not a guaranteed measured bitrate:
-simple footage can use less. No ghost-sample MP4 patch or Khaled frame
-manipulation is applied.
-
-TikTok video settings in `.env` must match the locked profile. Legacy
-`VIDEO_MAXRATE` and `VIDEO_BUFSIZE` settings are ignored.
-This latest pre-Khaled build does not include the separate GPU-selection branch.
-Its existing SDR/8-bit filter is retained: grade/tone-map HDR or log masters to
-SDR Rec.709 in your editor before upload. HEVC 4:2:0 needs even dimensions.
-TikTok may recompress uploads; no final-platform quality guarantee is made.
+Local and Telegram uploads use the same standard TikTok profile: 1080×1920 H.264, AAC 256 kb/s stereo, and verified Rec.709 color tags. Sources at 45 fps or higher export at 60 fps and a 25 Mb/s target with a 2× timeline and matched audio. Lower frame rates export at 30 fps and a 15 Mb/s target at normal speed.
 
 ## Start on Windows
 
@@ -99,7 +81,7 @@ The API HTTP server binds only to localhost. OpenClaw configuration is untouched
 
 ## Checks and troubleshooting
 
-`npm test` covers real 1080p/1440p/3K/4K HEVC exports, half-speed duration and
+`npm test` covers real 1080p/1440p/3K/4K H.264 vertical exports, half-speed duration and
 audio, batch upload/download, and simulated Telegram receive/return/cleanup,
 failed delivery, bot isolation and authorization. It sends nothing to real chats.
 `npm run doctor` checks the installed media tools.

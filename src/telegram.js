@@ -72,7 +72,7 @@ export async function receiveTelegramVideo(ctx, queue, bot, settings = config, m
     const source = await probe(target);
     const job = queue.add({ sourcePath: target, sourceName, bytes: savedBytes, chatId: ctx.chat.id, messageId: ctx.message.message_id, userId: ctx.from?.id, method });
     queued = true;
-    await ctx.reply(`Queued #${job.id.slice(0, 8)}: ${source.width}×${source.height} → same resolution, 60fps, ${settings.inputTimestampScale === 2 ? 'half speed (2× duration)' : 'normal speed'}, HEVC, ${bitrateFor(source).bitrate} target. ${method === 'tiktok' ? `I will return a preview File, then ask for the description for @${settings.tiktok.handle}. Publishing requires review and confirmation.` : 'I will return the MP4 as a File only. No TikTok draft or post will be created.'}`);
+    await ctx.reply(`Queued #${job.id.slice(0, 8)}: ${source.width}×${source.height} → 1080×1920, ${bitrateFor(source).bitrate === '25M' ? '60fps, half speed' : '30fps, normal speed'}, H.264, ${bitrateFor(source).bitrate} target. ${method === 'tiktok' ? `I will return a preview File, then ask for the description for @${settings.tiktok.handle}. Publishing requires review and confirmation.` : 'I will return the MP4 as a File only. No TikTok draft or post will be created.'}`);
   } catch (error) {
     console.error("Telegram receive:", redactTelegramError(error, settings));
     if (!queued) {
@@ -132,7 +132,7 @@ export async function deliverTelegramExport(bot, queue, job, settings = config) 
     const bytes = job.media.bytes;
     if (bytes > (localApi(settings) ? 2000 * 1000 ** 2 : 50 * 1024 ** 2)) throw new Error("Output exceeds Telegram's file upload limit.");
     await bot.api.sendDocument(job.chatId, new InputFile(job.outputPath), {
-      caption: `Done: ${path.basename(job.outputPath)}\n${job.media.width}×${job.media.height} • 60fps • ${job.media.timestampScale === 2 ? 'half speed (2× duration)' : 'normal speed'} • HEVC • ${job.media.bitrate} target • ${humanBytes(bytes)}`
+      caption: `Done: ${path.basename(job.outputPath)}\n${job.media.width}×${job.media.height} • ${job.media.fps.split('/')[0]}fps • ${job.media.timestampScale === 2 ? 'half speed (2× duration)' : 'normal speed'} • H.264 • ${job.media.bitrate} target • ${humanBytes(bytes)}`
     });
     job.telegramStatus = "sent"; job.telegramSentAt = new Date().toISOString();
   } catch (error) {
@@ -166,8 +166,8 @@ export async function startTelegram(queue, { settings = config, bot, poll = true
     if (!ctx.chat || (settings.allowedChatIds.size && !settings.allowedChatIds.has(String(ctx.chat.id)))) return ctx.reply("This bot is not authorized for this chat.");
     await next();
   });
-  bot.command("start", (ctx) => ctx.reply(`Send your original video as a File, then choose Return video only or Upload to TikTok @${settings.tiktok.handle}. Same locked local profile: original dimensions, 60fps, half-speed timestamps, HEVC MP4, 20 Mbps target, AAC 256k. Only the TikTok choice asks for a description. Use /myid and /tiktok for setup/status. Publishing requires account verification and explicit confirmation.`));
-  bot.command("profile", (ctx) => ctx.reply(`Same as local uploads: original dimensions • 60fps • -itsscale 2 • HEVC/hvc1 • 20M • AAC 256k stereo • locked to commit 6378e68.`));
+  bot.command("start", (ctx) => ctx.reply(`Send your original video as a File, then choose Return video only or Upload to TikTok @${settings.tiktok.handle}. Same vertical profile as local uploads: 1080×1920 H.264 MP4, 60fps at 25 Mb/s and half speed for 60fps sources, or 30fps at 15 Mb/s and normal speed for lower frame rates; AAC 256k. Only the TikTok choice asks for a description. Use /myid and /tiktok for setup/status. Publishing requires account verification and explicit confirmation.`));
+  bot.command("profile", (ctx) => ctx.reply(`Same as local uploads: 1080×1920 H.264 • 60fps / 25M / half speed for 60fps sources • 30fps / 15M / normal speed for lower frame rates • AAC 256k stereo.`));
   let askForCaption = async()=>{};
   if(!tiktokDrafts)bot.command('myid',(ctx)=>ctx.reply(`Telegram user ID: ${ctx.from?.id}\nChat ID: ${ctx.chat?.id}`));
   bot.command("status", (ctx) => {

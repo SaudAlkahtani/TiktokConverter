@@ -18,12 +18,12 @@ const render = (jobs) => {
     const status = node.querySelector('.status'); status.textContent = job.status; status.classList.add(job.status);
     node.querySelector('.bar span').style.width = `${job.progress || 0}%`;
     const detail = node.querySelector('.detail');
-    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.media?.width}×${job.media?.height} · HEVC · 60fps · ${job.media?.bitrate}${job.telegramStatus ? ` · Telegram ${job.telegramStatus}` : ''}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
+    detail.textContent = job.status === 'failed' ? job.error : job.status === 'complete' ? `Finished · ${bytes(job.media?.bytes)} · ${job.media?.width}×${job.media?.height} · H.264 · ${job.media?.fps === '60/1' ? '60' : '30'}fps · ${job.media?.targetVideoBitrateMbps} Mb/s target${job.telegramStatus ? ` · Telegram ${job.telegramStatus}` : ''}` : job.status === 'processing' && job.progress === 99 ? 'Finalizing MP4…' : `${job.progress || 0}% ${job.status === 'processing' ? 'rendered' : 'waiting'}`;
     const link = node.querySelector('.download'); if (job.downloadable) { link.hidden=false; link.href=`/api/jobs/${job.id}/download`; }
     jobsEl.append(node);
   }
 };
-const updateHealth = () => fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `${health.profile.name}  |  ${health.profile.codec}  |  ${health.profile.bitrate} target  |  GOP ${health.profile.gop}  |  AAC ${health.profile.audioBitrate} stereo  |  up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB each · ${health.maxUploadFiles} files per batch  |  Telegram: ${health.telegram?.status || 'disabled'}${health.telegram?.username ? ` @${health.telegram.username}` : ''}`; }).catch(() => {});
+const updateHealth = () => fetch('/api/health').then(r=>r.json()).then((health)=>{ profile.textContent = `Welcome! TikTok exports are 1080×1920 H.264. 60 fps sources use 60 fps, 25 Mb/s and half speed; lower frame rates use 30 fps, 15 Mb/s and normal speed. AAC 256 kb/s · up to ${(health.uploadLimitBytes / 1024 ** 3).toFixed(0)} GB per file${health.telegram ? ` · Telegram: ${health.telegram.status}` : ''}`; }).catch(() => {});
 updateHealth(); setInterval(updateHealth, 10000);
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
