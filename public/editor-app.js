@@ -1,6 +1,9 @@
 import { setupNavigation } from './navigation.js';
 import { deleteTimelineTrack, linkTimelineSegment, locateTimelineTime, moveTimelineSegment, moveTimelineSegmentTo, restoreTimelineTrack, splitTimelineSegment, timelineDuration, timelineOffset, trimTimelineSegment, unlinkTimelineSegment } from './editor-timeline.js';
 import {audioEnd, extendWithGap, moveAudioClip, splitAudioClip} from './editor-audio.js';
+import {snapTime, trimAudioEdge, trimVideoEdge} from './editor-trim.js';
+import {setupStudioShell} from './editor-workspace.js';
+import {createProject, parseProject, relinkProject, serializeProject, saveAutosave, loadAutosave} from './editor-project.js';
 
 const $ = (selector) => document.querySelector(selector);
 const source = $('#editor-source'), video = $('#editor-video'), sourceVideo = $('#source-video'), canvas = $('#editor-canvas');
@@ -10,10 +13,42 @@ const message = $('#editor-message'), regionsEl = $('#regions'), jobsEl = $('#ed
 const state = { regions: [], motionTitles: [], keepClear: null, tool: 'blur', drag: null, voiceUrl: null, pipUrl: null, duration: 0,
   sources: [], segments: [], extraAudioClips: [], audioPlayers: new Map(), selectedAudioId: null,
   selectedSegment: 0, selectedTrack: 'video', activeSegment: 0, activeSourceIndex: -1,
-  projectTime: 0, seeking: false, pendingSourceTime: null, resumeAfterLoad: false, history: [], future: [] };
+  projectTime: 0, seeking: false, pendingSourceTime: null, resumeAfterLoad: false, history: [], future: [],
+  snap: true, blade: false, fitTimeline: true, pendingProject: null };
+let studio, autosaveTimer;
 const number = (selector) => Number($(selector).value);
 const clock = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const timecode = (seconds) => `${clock(seconds)}:${String(Math.floor((seconds % 1) * 60)).padStart(2, '0')}`;
+function fitMonitor() {
+  const first = state.sources[state.segments[0]?.sourceIndex] || state.sources[state.activeSourceIndex];
+  const aspect = first ? first.width / first.height : 9 / 16;
+  const parent = stage.parentElement;
+  const height = Math.max(80, Math.min(parent.clientHeight || 300, (parent.clientWidth || 300) / aspect));
+  stage.style.width = `${height * aspect}px`; stage.style.height = `${height}px`;
+  stage.style.minHeight = '0'; stage.style.aspectRatio = String(aspect);
+}
+function snapPoints() {
+  const points = [0, timelineDuration(state.segments)];
+  state.segments.forEach((_,index) => points.push(timelineOffset(state.segments,index)));
+  state.extraAudioClips.forEach(clip => points.push(clip.timelineStart,audioEnd(clip)));
+  return points;
+}
+function snapped(time) {
+  const width = $('#timeline-ruler').clientWidth || 700;
+  return snapTime(time,snapPoints(),8 * timelineDuration(state.segments) / width,state.snap);
+}
+function detachCameraAudio(index) {
+  const segment = state.segments[index];
+  if (!segment || segment.audioEnabled === false) return null;
+  const clip = {id:crypto.randomUUID(),sourceIndex:segment.sourceIndex,start:segment.start,end:segment.end,
+    timelineStart:timelineOffset(state.segments,index),volume:number('#original-volume') / 100};
+  state.extraAudioClips.push(clip);
+  state.segments[index] = {...segment,audioEnabled:false,linked:false,preserveGap:true};
+  return clip;
+}
+function preserveAudioDuration() {
+  for (const clip of state.extraAudioClips) state.segments = extendWithGap(state.segments,audioEnd(clip),clip.sourceIndex,state.sources[clip.sourceIndex].duration);
+}
 const snapshotTimeline = () => ({ segments: state.segments.map(segment => ({ ...segment })), selectedSegment: state.selectedSegment,
   selectedTrack: state.selectedTrack, selectedAudioId: state.selectedAudioId, projectTime: state.projectTime,
   extraAudioClips: state.extraAudioClips.map(clip => ({...clip})),
@@ -94,6 +129,7 @@ function renderMotionTitles() {
   });
   if (!state.motionTitles.length) list.textContent = 'No titles yet.';
   updateMotionPreview();
+  scheduleAutosave();
 }
 function renderRegions() {
   regionsEl.replaceChildren();
@@ -101,17 +137,18 @@ function renderRegions() {
     const row = document.createElement('div'); row.className = 'editor-region-row';
     const label = document.createElement('span'); label.textContent = `Blur ${index + 1} · ${clock(region.start)}–${clock(region.end)}`;
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.className = 'queue-button';
-    remove.onclick = () => { state.regions.splice(index, 1); renderRegions(); redraw(); };
+    remove.onclick = () => { rememberTimeline(); state.regions.splice(index, 1); renderRegions(); redraw(); };
     row.append(label, remove); regionsEl.append(row);
   }
   if (state.keepClear) {
     const row = document.createElement('div'); row.className = 'editor-region-row';
     const label = document.createElement('span'); label.textContent = 'Keep clear · protects your face from auto blur';
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.className = 'queue-button';
-    remove.onclick = () => { state.keepClear = null; renderRegions(); redraw(); };
+    remove.onclick = () => { rememberTimeline(); state.keepClear = null; renderRegions(); redraw(); };
     row.append(label, remove); regionsEl.append(row);
   }
   if (!regionsEl.childElementCount) regionsEl.textContent = 'No manual blur areas yet.';
+  scheduleAutosave();
 }
 function inspectSource(url) {
   return new Promise((resolve, reject) => {
@@ -132,11 +169,13 @@ function renderBin() {
   state.sources.forEach((item, index) => {
     const option = document.createElement('option'); option.value = String(index); option.textContent = item.file.name; selector.append(option);
     const row = document.createElement('div'); row.className = 'editor-source-item';
+    row.dataset.sourceIndex = String(index);
     row.setAttribute('role', 'button'); row.tabIndex = 0;
     const name = document.createElement('strong'); name.textContent = `${index + 1}. ${item.file.name}`;
     const detail = document.createElement('small'); detail.textContent = `${item.width}×${item.height} · ${timecode(item.duration)}`;
     row.append(name, detail);
     row.onclick = () => { selector.value = String(index); updateBinRange(); };
+    row.ondblclick = () => addClips([{sourceIndex:index,start:0,end:item.duration,videoEnabled:true,audioEnabled:true,linked:true}]);
     row.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); row.click(); } };
     row.draggable = true;
     row.title = 'Drag to V1 for picture and camera audio, or A2 for audio alone.';
@@ -164,6 +203,7 @@ function renderBin() {
 function updateBinRange() {
   const item = state.sources[Number($('#bin-source').value)];
   if (!item) return;
+  for (const row of document.querySelectorAll('.editor-source-item')) row.classList.toggle('selected',row.dataset.sourceIndex === $('#bin-source').value);
   $('#bin-in').value = '0';
   $('#bin-out').value = String(Number(item.duration.toFixed(4)));
   $('#bin-in').max = String(item.duration); $('#bin-out').max = String(item.duration);
@@ -229,13 +269,13 @@ for (const [selector, track] of [['#timeline-footage', 'video'], ['#timeline-ext
     const audioId = event.dataTransfer.getData('application/x-gym-audio-id');
     if (sourceIndex) {
       event.preventDefault();
-      const position = dropPosition(event);
+      const position = snapped(dropPosition(event));
       if (track === 'video') insertVideoFromSource(Number(sourceIndex), position);
       else addAudioFromSource(Number(sourceIndex), 0, state.sources[Number(sourceIndex)]?.duration, position);
     } else if (audioId && track === 'extra-audio') {
       event.preventDefault();
       const grabOffset = Number(event.dataTransfer.getData('application/x-gym-audio-grab-offset')) || 0;
-      const next = moveAudioClip(state.extraAudioClips, audioId, Math.max(0, dropPosition(event) - grabOffset));
+      const next = moveAudioClip(state.extraAudioClips, audioId, snapped(Math.max(0, dropPosition(event) - grabOffset)));
       if (!next) return;
       rememberTimeline(); state.extraAudioClips = next;
       const clip = next.find(item => item.id === audioId);
@@ -293,6 +333,8 @@ function updateSelectedTrim() {
   }
   const segment = state.segments[state.selectedSegment];
   const enabled = Boolean(segment) && !extra;
+  $('#clip-selection-label').textContent = extra ? `A2 · ${state.sources[extra.sourceIndex]?.file.name}` :
+    segment ? `${state.selectedTrack === 'audio' ? 'A1' : 'V1'} · ${state.sources[segment.sourceIndex]?.file.name} · ${segment.linked === false ? 'Unlinked' : 'Linked picture + sound'}` : 'Select a timeline clip to edit its source range.';
   for (const id of ['#clip-in', '#clip-out', '#clip-apply']) $(id).disabled = !enabled;
   $('#clip-in').value = enabled ? String(segment.start) : '';
   $('#clip-out').value = enabled ? String(segment.end) : '';
@@ -300,6 +342,55 @@ function updateSelectedTrim() {
     const duration = state.sources[segment.sourceIndex].duration;
     $('#clip-in').max = String(duration); $('#clip-out').max = String(duration);
   }
+}
+function trimHandle(button, type, key, edge) {
+  const handle = document.createElement('span'); handle.className = `clip-trim-handle ${edge}`;
+  handle.title = `Drag to trim ${edge === 'start' ? 'In' : 'Out'}`;
+  handle.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation(); video.pause();
+    const board = $('#timeline-board');
+    const pixelsPerSecond = $('#timeline-ruler').clientWidth / timelineDuration(state.segments);
+    const initialX = event.clientX;
+    let changed = false, audio, initial;
+    board.setPointerCapture(event.pointerId); state.trimming = true;
+    const move = e => {
+      if (Math.abs(e.clientX - initialX) < 2 && !changed) return;
+      if (!changed) {
+        rememberTimeline(); changed = true;
+        if (type === 'extra-audio') audio = state.extraAudioClips.find(clip => clip.id === key);
+        else {
+          state.selectedSegment = key; state.selectedTrack = type;
+          const segment = state.segments[key];
+          if (segment.linked === false && segment.audioEnabled !== false) {
+            const detached = detachCameraAudio(key);
+            if (type === 'audio') audio = detached;
+          }
+        }
+        initial = {...(audio || state.segments[key])};
+      }
+      let delta = (e.clientX - initialX) / pixelsPerSecond;
+      if (audio) {
+        const endpoint = edge === 'start' ? initial.timelineStart : audioEnd(initial);
+        delta = snapped(endpoint + delta) - endpoint;
+        const next = trimAudioEdge(initial,edge,delta,state.sources[initial.sourceIndex].duration);
+        Object.assign(audio,next); state.selectedAudioId = audio.id; state.selectedTrack = 'extra-audio';
+      } else {
+        state.segments[key] = trimVideoEdge(initial,edge,delta,state.sources[initial.sourceIndex].duration);
+      }
+      renderTimeline();
+      message.textContent = `${audio ? 'Audio' : 'Video pair'} ${edge === 'start' ? 'In' : 'Out'}: ${timecode((audio || state.segments[key])[edge])}. Release to apply.`;
+    };
+    const finish = () => {
+      board.removeEventListener('pointermove',move); board.removeEventListener('pointerup',finish); board.removeEventListener('pointercancel',finish);
+      state.trimming = false;
+      if (!changed) return;
+      preserveAudioDuration(); renderTimeline(); seekProject(Math.min(state.projectTime,state.duration - .001));
+      message.textContent = audio ? 'Audio trimmed independently. Video stays in place.' : 'Video trimmed. Linked camera audio follows the trim; detached A2 audio stays in place.';
+    };
+    board.addEventListener('pointermove',move); board.addEventListener('pointerup',finish); board.addEventListener('pointercancel',finish);
+  });
+  handle.addEventListener('click',event => event.stopPropagation()); button.append(handle);
 }
 function renderExtraAudioTrack(total) {
   const track = $('#timeline-extra-audio'); track.replaceChildren();
@@ -313,6 +404,7 @@ function renderExtraAudioTrack(total) {
     const label = document.createElement('strong'); label.textContent = `♫ ${state.sources[clip.sourceIndex]?.file.name || 'Audio'}`;
     const times = document.createElement('small'); times.textContent = `${timecode(clip.timelineStart)} · ${timecode(clip.end - clip.start)}`;
     button.append(label, times);
+    trimHandle(button,'extra-audio',clip.id,'start'); trimHandle(button,'extra-audio',clip.id,'end');
     button.draggable = true;
     button.addEventListener('dragstart', event => {
       event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-gym-audio-id', clip.id);
@@ -324,14 +416,16 @@ function renderExtraAudioTrack(total) {
       video.pause(); state.selectedTrack = 'extra-audio'; state.selectedAudioId = clip.id;
       const rect = button.getBoundingClientRect();
       const fraction = Math.max(0, Math.min(.999, (event.clientX - rect.left) / rect.width));
-      seekProject(clip.timelineStart + fraction * (clip.end - clip.start)); renderTimeline();
+      seekProject(snapped(clip.timelineStart + fraction * (clip.end - clip.start))); renderTimeline();
+      studio?.inspector('clip'); if (state.blade) $('#timeline-split').click();
     };
     track.append(button);
   }
 }
 function renderTimeline() {
   const total = timelineDuration(state.segments), clips = $('#timeline-clips');
-  const width = Math.ceil(Math.max(700, total * number('#timeline-zoom'), state.segments.length * 36));
+  const viewportWidth = Math.max(400,$('#timeline-board').clientWidth - 92);
+  const width = Math.ceil(state.fitTimeline ? viewportWidth : Math.max(viewportWidth, total * number('#timeline-zoom')));
   $('#timeline-board').style.setProperty('--timeline-width', `${width}px`);
   const offsets = [];
   for (let index = 0, position = 0; index < state.segments.length; index++) {
@@ -340,13 +434,13 @@ function renderTimeline() {
   }
   state.duration = total;
   state.projectTime = Math.min(state.projectTime, total);
-  if (total) {
+  if (total && !state.trimming) {
     const count = state.regions.length;
     state.regions = state.regions.filter(region => region.start < total).map(region => ({ ...region, end: Math.min(region.end, total) }));
     if (count !== state.regions.length) renderRegions();
     for (const selector of ['#blur-start','#voice-start','#pip-start']) if (number(selector) > total) $(selector).value = String(total);
     for (const selector of ['#blur-end','#pip-end']) if ($(selector).value && number(selector) > total) $(selector).value = String(total);
-  } else {
+  } else if (!total) {
     state.regions = []; renderRegions();
   }
   $('#blur-end').placeholder = `End (${Math.floor(total)}s)`;
@@ -379,6 +473,7 @@ function renderTimeline() {
       const name = document.createElement('strong'); name.textContent = enabled ? (track === 'audio' ? `♫ ${sourceName}` : sourceName) : `${track === 'audio' ? 'Audio' : 'Video'} removed`;
       const times = document.createElement('small'); times.textContent = `${segment.linked === false ? 'Unlinked' : 'Linked'} · ${timecode(segment.start)}–${timecode(segment.end)}`;
       clip.append(name, times);
+      if (enabled) { trimHandle(clip,track,index,'start'); trimHandle(clip,track,index,'end'); }
       clip.draggable = true;
       clip.addEventListener('dragstart', event => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-gym-editor-clip', String(index)); });
       clip.addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; });
@@ -396,7 +491,8 @@ function renderTimeline() {
         video.pause(); state.selectedSegment = index; state.selectedTrack = track; state.selectedAudioId = null;
         const rect = clip.getBoundingClientRect();
         const fraction = Math.max(0, Math.min(0.999, (event.clientX - rect.left) / rect.width));
-        seekProject(offsets[index] + fraction * (segment.end - segment.start)); renderTimeline();
+        seekProject(snapped(offsets[index] + fraction * (segment.end - segment.start))); renderTimeline();
+        studio?.inspector('clip'); if (state.blade) $('#timeline-split').click();
       };
       container.append(clip);
     }
@@ -428,6 +524,7 @@ function renderTimeline() {
   $('#bin-add-audio').disabled = !state.sources.length;
   updateSelectedTrim();
   updateTimelinePosition();
+  fitMonitor(); scheduleAutosave();
 }
 function refreshPlayback() {
   if (!state.segments.length || state.seeking) return;
@@ -449,8 +546,7 @@ function monitorFrames() {
   refreshPlayback();
   if (!video.paused && video.requestVideoFrameCallback) video.requestVideoFrameCallback(monitorFrames);
 }
-source.addEventListener('change', async () => {
-  const files = [...source.files]; source.value = '';
+async function importSources(files) {
   if (!files.length) return;
   message.textContent = `Reading ${files.length} video${files.length === 1 ? '' : 's'}…`;
   for (const file of files) {
@@ -465,6 +561,10 @@ source.addEventListener('change', async () => {
   }
   renderBin(); renderTimeline();
   if (state.sources.length) message.textContent = `${state.sources.length} videos ready. Add full videos or choose any In/Out range.`;
+}
+source.addEventListener('change', async () => {
+  const files = [...source.files]; source.value = '';
+  await importSources(files);
 });
 $('#bin-source').addEventListener('change', updateBinRange);
 $('#bin-add').onclick = () => {
@@ -494,10 +594,7 @@ $('#bin-add-audio').onclick = () => {
 $('#source-mark-in').onclick = () => { if (state.sources.length) $('#bin-in').value = String(Number(sourceVideo.currentTime.toFixed(4))); };
 $('#source-mark-out').onclick = () => { if (state.sources.length) $('#bin-out').value = String(Number(sourceVideo.currentTime.toFixed(4))); };
 video.addEventListener('loadedmetadata', () => {
-  const first = state.sources[state.segments[0]?.sourceIndex] || state.sources[state.activeSourceIndex];
-  const aspect = first ? first.width / first.height : video.videoWidth / video.videoHeight;
-  stage.style.width = `${Math.min(stage.parentElement.clientWidth - 36, Math.round(window.innerHeight * 0.75 * aspect))}px`;
-  stage.style.minHeight = '0'; stage.style.aspectRatio = first ? `${first.width} / ${first.height}` : `${video.videoWidth} / ${video.videoHeight}`;
+  fitMonitor();
   if (state.pendingSourceTime !== null) {
     const target = state.pendingSourceTime; state.pendingSourceTime = null;
     if (Math.abs(video.currentTime - target) >= .0005) video.currentTime = target;
@@ -519,7 +616,6 @@ $('#editor-play').addEventListener('click', () => {
 video.addEventListener('play', () => { $('#editor-play').textContent = 'Pause'; if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(monitorFrames); });
 video.addEventListener('pause', () => { $('#editor-play').textContent = 'Play'; });
 $('#editor-scrub').addEventListener('input', (event) => { if (state.segments.length) seekProject(timelineDuration(state.segments) * Number(event.target.value) / 1000); });
-$('#timeline-zoom').addEventListener('input', renderTimeline);
 for (const [selector, direction] of [['#editor-step-back',-1],['#editor-step-forward',1]]) $(selector).onclick = () => {
   if (!state.segments.length) return;
   video.pause(); seekProject(state.projectTime + direction / 60);
@@ -528,8 +624,18 @@ $('#timeline-ruler').addEventListener('click', (event) => {
   if (!state.segments.length) return;
   video.pause();
   const rect = event.currentTarget.getBoundingClientRect();
-  seekProject(timelineDuration(state.segments) * Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)));
+  seekProject(snapped(timelineDuration(state.segments) * Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))));
 });
+for (const selector of ['#timeline-ruler','#timeline-footage','#timeline-extra-audio']) {
+  const surface = $(selector);
+  surface.addEventListener('pointerdown',event => {
+    if (event.button !== 0 || event.target.closest('button') || !state.segments.length) return;
+    event.preventDefault(); video.pause(); surface.setPointerCapture(event.pointerId);
+    const seek = e => { const rect = surface.getBoundingClientRect(); seekProject(snapped((e.clientX - rect.left) / rect.width * state.duration)); };
+    const end = () => {surface.removeEventListener('pointermove',seek);surface.removeEventListener('pointerup',end);surface.removeEventListener('pointercancel',end);};
+    seek(event); surface.addEventListener('pointermove',seek);surface.addEventListener('pointerup',end);surface.addEventListener('pointercancel',end);
+  });
+}
 $('#timeline-split').onclick = () => {
   if (!state.segments.length) return;
   video.pause();
@@ -541,9 +647,19 @@ $('#timeline-split').onclick = () => {
     renderTimeline(); message.textContent = 'Split only the A2 audio clip. Video remains unchanged.'; return;
   }
   const point = locateTimelineTime(state.segments, state.projectTime);
-  const next = splitTimelineSegment(state.segments, point.index, point.sourceTime);
+  let next = splitTimelineSegment(state.segments, point.index, point.sourceTime);
   if (!next) { message.textContent = 'Move the playhead at least 0.08 seconds inside a clip before splitting.'; return; }
   rememberTimeline();
+  const segment = state.segments[point.index];
+  if (segment.linked === false && segment.audioEnabled !== false) {
+    const audio = detachCameraAudio(point.index);
+    if (state.selectedTrack === 'audio') {
+      state.extraAudioClips = splitAudioClip(state.extraAudioClips,audio.id,state.projectTime);
+      state.selectedTrack = 'extra-audio'; state.selectedAudioId = audio.id;
+      renderTimeline(); message.textContent = 'Split the unlinked camera audio on A2. The video stays whole.'; return;
+    }
+    next = splitTimelineSegment(state.segments,point.index,point.sourceTime);
+  }
   state.segments = next; state.selectedSegment = point.index + 1;
   seekProject(state.projectTime); renderTimeline(); message.textContent = `Split created. ${next.length} clips on the timeline.`;
 };
@@ -557,10 +673,11 @@ $('#timeline-remove').onclick = () => {
     message.textContent = 'Removed only the selected A2 audio clip. Video remains unchanged.'; return;
   }
   const selected = state.segments[state.selectedSegment];
-  const next = deleteTimelineTrack(state.segments, state.selectedSegment, state.selectedTrack);
+  let next = deleteTimelineTrack(state.segments, state.selectedSegment, state.selectedTrack);
   if (!next) { message.textContent = 'That track is already empty.'; return; }
   rememberTimeline();
-  video.pause(); state.segments = next; state.selectedSegment = Math.min(state.selectedSegment, next.length - 1);
+  video.pause(); state.segments = next; preserveAudioDuration(); next = state.segments;
+  state.selectedSegment = Math.min(state.selectedSegment, next.length - 1);
   if (next.length) seekProject(Math.min(state.projectTime, timelineDuration(next) - 0.01));
   else { state.projectTime = 0; state.activeSegment = 0; state.activeSourceIndex = -1;
     video.removeAttribute('src'); video.load(); $('#preview-placeholder').hidden = false; }
@@ -577,12 +694,8 @@ $('#timeline-unlink').onclick = () => {
 $('#timeline-detach-audio').onclick = () => {
   const segment = state.segments[state.selectedSegment];
   if (!segment || segment.audioEnabled === false) return;
-  const sourceIndex = segment.sourceIndex;
   rememberTimeline(); video.pause();
-  const clip = {id: crypto.randomUUID(), sourceIndex, start: segment.start, end: segment.end,
-    timelineStart: timelineOffset(state.segments, state.selectedSegment), volume: 1};
-  state.extraAudioClips.push(clip);
-  state.segments[state.selectedSegment] = {...segment, audioEnabled: false, linked: false, preserveGap: true};
+  const clip = detachCameraAudio(state.selectedSegment);
   state.selectedTrack = 'extra-audio'; state.selectedAudioId = clip.id;
   renderTimeline(); syncPreviews();
   message.textContent = 'Camera audio is now a full A2 clip. Split or delete the video separately; the audio stays in place.';
@@ -614,7 +727,18 @@ $('#clip-apply').onclick = () => {
   const next = trimTimelineSegment(state.segments, state.selectedSegment, number('#clip-in'), number('#clip-out'), duration);
   if (!next) { message.textContent = 'Set In and Out within the source video, with at least 0.08 seconds between them.'; return; }
   rememberTimeline();
-  video.pause(); state.segments = next;
+  video.pause();
+  if (segment.linked === false && segment.audioEnabled !== false) {
+    const audio = detachCameraAudio(state.selectedSegment);
+    if (state.selectedTrack === 'audio') {
+      const range = next[state.selectedSegment];
+      audio.timelineStart = Math.max(0,audio.timelineStart + range.start - audio.start);
+      audio.start = range.start; audio.end = range.end;
+      state.selectedTrack = 'extra-audio'; state.selectedAudioId = audio.id;
+    } else next[state.selectedSegment] = {...next[state.selectedSegment],audioEnabled:false,preserveGap:true};
+  }
+  if (state.selectedTrack !== 'extra-audio') state.segments = next;
+  preserveAudioDuration();
   renderTimeline(); seekProject(timelineOffset(next, state.selectedSegment));
   message.textContent = 'Selected clip trimmed. The source video is unchanged.';
 };
@@ -651,6 +775,8 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault(); if (event.shiftKey) redoTimeline(); else undoTimeline(); return;
   }
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (!event.shiftKey && (key === 'v' || key === 'b')) { event.preventDefault(); setTimelineTool(key === 'b'); return; }
+  if (!event.shiftKey && key === 's') { event.preventDefault(); $('#timeline-snap').click(); return; }
   if (event.shiftKey && key === 'r' && !$('#timeline-split').disabled) { event.preventDefault(); $('#timeline-split').click(); return; }
   if (event.shiftKey && key === 'g' && !$('#timeline-unlink').disabled) { event.preventDefault(); $('#timeline-unlink').click(); return; }
   if (event.shiftKey && key === 'd' && !$('#timeline-detach-audio').disabled) { event.preventDefault(); $('#timeline-detach-audio').click(); return; }
@@ -672,12 +798,12 @@ canvas.addEventListener('pointerup', (event) => {
   if (!state.drag) return;
   const rect = rectBetween(state.drag.start, normalized(event)); state.drag = null;
   if (rect.w < 0.01 || rect.h < 0.01) { redraw(); return; }
-  if (state.tool === 'clear') state.keepClear = rect;
+  if (state.tool === 'clear') { rememberTimeline(); state.keepClear = rect; }
   else {
     const start = number('#blur-start'), end = $('#blur-end').value ? number('#blur-end') : state.duration;
     if (start < 0 || end <= start || end > state.duration + 0.1) { message.textContent = 'Choose a valid blur time range.'; redraw(); return; }
     if (state.regions.length >= 20) { message.textContent = 'Maximum 20 blur areas.'; redraw(); return; }
-    state.regions.push({ ...rect, start, end });
+    rememberTimeline(); state.regions.push({ ...rect, start, end });
   }
   renderRegions(); redraw();
 });
@@ -736,23 +862,21 @@ $('#plan-download').onclick = () => {
   const link = document.createElement('a'); link.href = url; link.download = 'gym-edit-plan.json'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-$('#plan-apply').onclick = () => {
-  try {
-    const plan = JSON.parse($('#editor-plan').value);
+function applyPlan(plan) {
     if (plan.version !== 1 || !Array.isArray(plan.sources) || plan.sources.length !== state.sources.length ||
-      plan.sources.some((name, index) => name !== state.sources[index].file.name))
+      plan.sources.some((name, index) => name.split(/[\\/]/).at(-1) !== state.sources[index].file.name))
       throw new Error('Import the source videos listed in this plan, in the same order, before applying it.');
     const settings = plan.settings;
-    if (!settings || !Array.isArray(settings.segments) || !settings.segments.length ||
-      settings.segments.some(segment => !Number.isInteger(segment.sourceIndex) || !state.sources[segment.sourceIndex] ||
+    if (!settings || !Array.isArray(settings.segments) ||
+      settings.segments.some(segment => !Number.isInteger(segment.sourceIndex ?? 0) || !state.sources[segment.sourceIndex ?? 0] ||
         !Number.isFinite(segment.start) || !Number.isFinite(segment.end) || segment.start < 0 ||
-        segment.end <= segment.start || segment.end > state.sources[segment.sourceIndex].duration + 0.1))
+        segment.end <= segment.start || segment.end > state.sources[segment.sourceIndex ?? 0].duration + 0.1))
       throw new Error('The plan contains an invalid timeline clip.');
     if (!Array.isArray(settings.audioClips || []) || (settings.audioClips || []).some(clip =>
       !clip || !Number.isInteger(clip.sourceIndex) || !state.sources[clip.sourceIndex] ||
       !Number.isFinite(clip.start) || !Number.isFinite(clip.end) || !Number.isFinite(clip.timelineStart) ||
       clip.start < 0 || clip.end - clip.start < .08 || clip.end > state.sources[clip.sourceIndex].duration + .05 ||
-      clip.timelineStart < 0)) throw new Error('The plan contains an invalid A2 audio clip.');
+      clip.timelineStart < 0 || !Number.isFinite(clip.volume ?? 1) || (clip.volume ?? 1) < 0 || (clip.volume ?? 1) > 2)) throw new Error('The plan contains an invalid A2 audio clip.');
     const plannedDuration = Math.max(timelineDuration(settings.segments),
       ...(settings.audioClips || []).map(clip => audioEnd(clip)));
     if (!Array.isArray(settings.blurRegions) || !Array.isArray(settings.motionTitles || []) ||
@@ -761,8 +885,8 @@ $('#plan-apply').onclick = () => {
         title.end > plannedDuration + 0.1))
       throw new Error('The plan needs valid blur and title lists.');
     rememberTimeline(); video.pause();
-    state.segments = settings.segments.map(segment => ({...segment}));
-    state.extraAudioClips = (settings.audioClips || []).map(clip => ({...clip, id: crypto.randomUUID()}));
+    state.segments = settings.segments.map(segment => ({...segment,sourceIndex:segment.sourceIndex ?? 0}));
+    state.extraAudioClips = (settings.audioClips || []).map(clip => ({...clip,volume:clip.volume ?? 1,id: crypto.randomUUID()}));
     for (const clip of state.extraAudioClips) state.segments = extendWithGap(state.segments, audioEnd(clip),
       clip.sourceIndex, state.sources[clip.sourceIndex].duration);
     for (const player of state.audioPlayers.values()) player.pause(); state.audioPlayers.clear();
@@ -771,19 +895,23 @@ $('#plan-apply').onclick = () => {
     state.motionTitles = (settings.motionTitles || []).map(title => ({...title}));
     state.selectedSegment = 0; state.selectedTrack = 'video'; state.selectedAudioId = null;
     $('#auto-faces').checked = settings.autoFaces === true;
-    for (const [id, value] of [['#voice-start',settings.voiceStart],['#voice-in',settings.voiceIn],['#voice-out',settings.voiceOut],
-      ['#voice-volume',settings.voiceVolume == null ? null : settings.voiceVolume * 100],
-      ['#original-volume',settings.originalVolume == null ? null : settings.originalVolume * 100],
-      ['#pip-start',settings.pipStart],['#pip-end',settings.pipEnd],['#pip-size',settings.pipWidth == null ? null : settings.pipWidth * 100],
-      ['#pip-position',settings.pipPosition],['#editor-encoder',settings.encoder]]) {
+    for (const [id, value] of [['#voice-start',settings.voiceStart ?? 0],['#voice-in',settings.voiceIn ?? 0],['#voice-out',settings.voiceOut],
+      ['#voice-volume',(settings.voiceVolume ?? 1) * 100],
+      ['#original-volume',(settings.originalVolume ?? .25) * 100],
+      ['#pip-start',settings.pipStart ?? 0],['#pip-end',settings.pipEnd],['#pip-size',(settings.pipWidth ?? .32) * 100],
+      ['#pip-position',settings.pipPosition || 'bottom-right'],['#editor-encoder',settings.encoder || 'auto']]) {
       $(id).value = value == null ? '' : String(value);
     }
     $('#original-level').textContent = `${$('#original-volume').value}%`;
     $('#voice-level').textContent = `${$('#voice-volume').value}%`;
     $('#pip-size-label').textContent = `${$('#pip-size').value}%`;
-    renderRegions(); renderMotionTitles(); renderTimeline(); seekProject(0);
+    renderRegions(); renderMotionTitles(); renderTimeline(); if (state.segments.length) seekProject(0);
+    else { video.removeAttribute('src'); video.load(); $('#preview-placeholder').hidden = false; }
     message.textContent = 'Edit plan applied. Review the sequence and export when ready.';
-  } catch (error) { message.textContent = error.message; }
+}
+$('#plan-apply').onclick = () => {
+  try { applyPlan(JSON.parse($('#editor-plan').value)); }
+  catch (error) { message.textContent = error.message; }
 };
 function syncPreviews() {
   const active = state.segments[state.activeSegment];
@@ -848,8 +976,128 @@ $('#editor-submit').addEventListener('click', async () => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not queue the edit.');
     message.textContent = `Edit #${data.id.slice(0,8)} queued. Its platform exports will follow in the same processing list.`;
+    studio?.jobs(true);
   } catch (error) { message.textContent = error.message; }
   finally { button.disabled = false; }
+});
+function projectDocument() {
+  return createProject(currentPlan(), {sources:state.sources.map(item => item.file),
+    voice:voice.files[0] || null,pip:pip.files[0] || null,name:$('#project-name').value || 'Untitled gym edit'});
+}
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  if (!state.sources.length || state.pendingProject) return;
+  autosaveTimer = setTimeout(() => {
+    try { saveAutosave(projectDocument()); $('#project-status').textContent = 'Saved on this device'; $('#project-recover').hidden = false; }
+    catch (error) { $('#project-status').textContent = error.message; }
+  },600);
+}
+function saveProject() {
+  try {
+    const project = projectDocument();
+    const url = URL.createObjectURL(new Blob([serializeProject(project)],{type:'application/json'}));
+    const link = document.createElement('a'); link.href = url;
+    link.download = `${project.name.replace(/[^\p{L}\p{N}_ -]/gu,'').trim() || 'gym-edit'}.gymedit.json`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url),1000);
+    message.textContent = 'Project downloaded. Keep the original videos alongside it; select them again when reopening.';
+  } catch (error) { message.textContent = error.message; }
+}
+async function loadProjectMedia(files) {
+  const project = state.pendingProject;
+  if (!project) return;
+  let prepared = [];
+  const previousSources = state.sources;
+  const previousSnapshot = snapshotTimeline(), previousHistory = [...state.history], previousFuture = [...state.future];
+  const previousControls = [...document.querySelectorAll('.editor-controls input:not([type=file]),.editor-controls select')].map(input => [input,input.value,input.checked]);
+  const previousAssets = [voice.files[0],pip.files[0]];
+  try {
+    const linked = relinkProject(project,[...new Set(files)]);
+    message.textContent = 'Relinking original media…';
+    for (const file of linked.sources) {
+      const url = URL.createObjectURL(file);
+      try { prepared.push({file,url,...await inspectSource(url)}); }
+      catch (error) { URL.revokeObjectURL(url); throw error; }
+    }
+    state.sources = prepared; video.pause(); state.activeSourceIndex = -1;
+    applyPlan(linked.plan);
+    for (const [input,file,target,key] of [[voice,linked.voice,voicePreview,'voiceUrl'],[pip,linked.pip,pipPreview,'pipUrl']]) {
+      const transfer = new DataTransfer(); if (file) transfer.items.add(file); input.files = transfer.files;
+      setObject(file,target,key);
+    }
+    voiceMonitor.src = state.voiceUrl || ''; voiceMonitor.hidden = !linked.voice;
+    state.history = []; state.future = []; state.pendingProject = null;
+    $('#project-name').value = project.name; $('#project-relink').hidden = true;
+    renderBin(); renderTimeline(); syncPreviews(); scheduleAutosave();
+    for (const item of previousSources) URL.revokeObjectURL(item.url);
+    message.textContent = 'Project restored with its original media. Your timeline and audio edits are ready.';
+  } catch (error) {
+    state.sources = previousSources; state.activeSourceIndex = -1; state.pendingProject = project;
+    for (const [input,value,checked] of previousControls) {input.value = value; input.checked = checked;}
+    for (const [index,input,target,key] of [[0,voice,voicePreview,'voiceUrl'],[1,pip,pipPreview,'pipUrl']]) {
+      const transfer = new DataTransfer(); if (previousAssets[index]) transfer.items.add(previousAssets[index]); input.files = transfer.files;
+      setObject(previousAssets[index],target,key);
+    }
+    voiceMonitor.src = state.voiceUrl || ''; voiceMonitor.hidden = !previousAssets[0];
+    renderBin(); restoreSnapshot(previousSnapshot); state.history = previousHistory; state.future = previousFuture;
+    $('#project-relink').hidden = false;
+    for (const item of prepared) URL.revokeObjectURL(item.url);
+    message.textContent = error.message;
+  }
+}
+function requestProject(project) {
+  state.pendingProject = project;
+  $('#project-relink').hidden = false;
+  $('#project-relink').querySelector('span').textContent = `Relink ${project.name}: select its original videos, voice, and overlay files together.`;
+  message.textContent = 'Project ready to open. Choose its original media to restore the edit.';
+}
+async function openProject(event) {
+  const file = event.target.files[0]; event.target.value = '';
+  if (!file) return;
+  try {
+    if (file.size > 5_000_000) throw new Error('Choose a project JSON file smaller than 5 MB.');
+    requestProject(parseProject(await file.text()));
+    try { relinkProject(state.pendingProject,state.sources.map(item => item.file)); await loadProjectMedia(state.sources.map(item => item.file)); }
+    catch { $('#project-media-file').click(); }
+  } catch (error) { message.textContent = error.message; }
+}
+function recoverProject() {
+  try { const project = loadAutosave(); if (!project) throw new Error('There is no saved edit on this browser yet.'); requestProject(project); $('#project-media-file').click(); }
+  catch (error) { message.textContent = error.message; }
+}
+function setTimelineTool(blade) {
+  state.blade = blade; $('.editor-page').dataset.tool = blade ? 'blade' : 'select';
+  $('#timeline-tool-select').setAttribute('aria-pressed',String(!blade));
+  $('#timeline-tool-blade').setAttribute('aria-pressed',String(blade));
+}
+studio = setupStudioShell({message:text => { message.textContent = text; },
+  newProject:() => {
+    if (state.sources.length && !confirm('Start a new project? Download a project file first if you want a separate copy. The last autosave remains available through Recover.')) return;
+    location.reload();
+  },saveProject,openProject,recoverProject,
+  relinkProject:async event => { const files = [...event.target.files]; event.target.value = ''; await loadProjectMedia(files); },
+  projectChanged:scheduleAutosave,
+  fitTimeline:() => {state.fitTimeline = true; renderTimeline();},
+  resize:() => {fitMonitor(); if (state.fitTimeline) renderTimeline();}
+});
+$('#timeline-tool-select').onclick = () => setTimelineTool(false);
+$('#project-relink-cancel').onclick = () => {state.pendingProject = null; $('#project-relink').hidden = true; scheduleAutosave(); message.textContent = 'Project opening canceled. Your current edit is still available.';};
+$('#timeline-tool-blade').onclick = () => setTimelineTool(true);
+$('#timeline-snap').onclick = () => { state.snap = !state.snap; $('#timeline-snap').setAttribute('aria-pressed',String(state.snap)); };
+$('#timeline-zoom').addEventListener('input', () => { state.fitTimeline = false; renderTimeline(); });
+for (const name of ['input','change']) $('.editor-controls').addEventListener(name,scheduleAutosave);
+const mediaPool = $('#media-pool');
+mediaPool.addEventListener('dragover',event => { if ([...event.dataTransfer.types].includes('Files')) {event.preventDefault(); mediaPool.classList.add('drag-over');} });
+mediaPool.addEventListener('dragleave',event => { if (!mediaPool.contains(event.relatedTarget)) mediaPool.classList.remove('drag-over'); });
+mediaPool.addEventListener('drop',event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); mediaPool.classList.remove('drag-over');
+  importSources([...event.dataTransfer.files].filter(file => file.type.startsWith('video/') || /\.(mp4|mov|mkv|avi|webm|m4v)$/i.test(file.name))); });
+// Prevent dropped files outside the media pool from replacing the editor page.
+window.addEventListener('dragover',event => { if ([...event.dataTransfer.types].includes('Files')) event.preventDefault(); });
+window.addEventListener('drop',event => { if (event.dataTransfer.files.length) event.preventDefault(); });
+try { const saved = loadAutosave(); $('#project-recover').hidden = !saved;
+  if (saved) $('#project-status').textContent = `Recovery available: ${saved.name}`;
+} catch (error) { $('#project-status').textContent = error.message; }
+window.addEventListener('beforeunload',() => {
+  if (state.sources.length && !state.pendingProject) try { saveAutosave(projectDocument()); } catch {}
 });
 fetch('/api/editor/encoders').then((response) => response.json()).then((available) => {
   $('#encoder-status').textContent = `Available: CPU${available.nvidia ? ' · NVIDIA NVENC' : ''}${available.amd ? ' · AMD AMF' : ''}. Auto chooses the first working hardware encoder.`;
@@ -880,6 +1128,6 @@ function renderJobs(allJobs) {
     card.append(top, bar, bottom); jobsEl.append(card);
   }
 }
-setupNavigation({ nav: $('.platform-nav'), window, location, startStream: () => {
+setupNavigation({ nav: $('.studio-converters'), window, location, startStream: () => {
   const stream = new EventSource('/api/events'); stream.onmessage = ({ data }) => renderJobs(JSON.parse(data)); return stream;
 } });

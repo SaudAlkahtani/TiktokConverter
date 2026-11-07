@@ -62,6 +62,7 @@ export function linkTimelineSegment(segments, index) {
 export function deleteTimelineTrack(segments, index, track) {
   const clip = segments[index];
   if (!clip || !['video', 'audio'].includes(track)) return null;
+  if (clip.preserveGap && clip.videoEnabled === false && clip.audioEnabled === false) return removeTimelineSegment(segments,index);
   if (clip.linked !== false) return removeTimelineSegment(segments, index);
   const key = track === 'video' ? 'videoEnabled' : 'audioEnabled';
   if (clip[key] === false) return null;

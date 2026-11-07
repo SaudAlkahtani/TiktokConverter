@@ -8,7 +8,9 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "doctor": "node src/doctor.js",
-    "editor:plan": "node scripts/render-editor-plan.js"
+    "editor:plan": "node scripts/render-editor-plan.js",
+    "editor:desktop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-editor-desktop.ps1",
+    "editor:shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-editor-shortcut.ps1"
   },
   "engines": {
     "node": ">=20"

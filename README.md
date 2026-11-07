@@ -74,7 +74,28 @@ small, turned, or moving faces. Optionally add voice audio, lower the original
 sound, and add a timed picture-in-picture clip (its sound is muted). Select
 Auto, CPU, NVIDIA NVENC, or AMD AMF, then start the edit.
 
+The editor now opens as **Journey Studio**, a desktop-style workspace with a
+docked media pool, dual monitors, a tabbed inspector, and an always-visible
+timeline. Drag the panel dividers to resize them; **Reset layout** restores the
+default arrangement. **Edit**, **Audio**, and **Deliver** switch workspaces.
+The **Render queue** opens the progress and download drawer. For a separate
+Windows app window and Desktop shortcut, follow
+[the desktop editor installation guide](docs/EDITOR-DESKTOP.md).
+
+**Save project** / **Ctrl+S** downloads a `.gymedit.json` file. **Open** /
+**Ctrl+O** restores one, then asks you to select its original videos, voice,
+and overlay files. File order does not matter during relinking. The browser
+also saves the current edit locally; **Recover draft** restores it after a
+refresh. These project files contain editing decisions and media descriptions,
+so keep the original media files. The JSON panel still exports the plain edit
+plan used by the command-line renderer.
+
 The project bin accepts multiple videos in one selection or in later batches.
+You can also drop files from Explorer into the media pool or double-click an
+imported source to append it. **V** selects clips; **B** enables the blade tool.
+Drag a clip's left or right edge to trim it, **S** toggles snapping, and
+**Shift+Z** fits the sequence into the timeline. Click and drag the ruler to scrub.
+An unlinked A1 cut or trim detaches that audio onto A2 so the video remains intact.
 The editor has separate source and project monitors: preview a selected source,
 use **Mark In**/**Mark Out**, then add it to the project timeline. The project
 monitor previews the assembled sequence.
